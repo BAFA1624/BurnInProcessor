@@ -1,0 +1,10 @@
+1) Concatenating specified files, threadsafe?
+	- Provide std::vector<std::fstream>>&? Filled with unopened, pre-initialized filestreams?
+	- Threaded? Read in data, clean, return.
+	- Concatenate data based on predetermined method, then return.
+
+2) Datapoint reduction
+	- Receive prespecified method & data. E.g, take avg & std of last 100 data points,
+	or avg & std of last minute of each 6 min cycle.
+	- Perform reduction to data.
+	- Return.
