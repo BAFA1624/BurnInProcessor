@@ -1440,9 +1440,6 @@ namespace burn_in_data_report
                     strings[key].reserve(lines.size() - settings.get_header_lim());
                     write_err_log(std::runtime_error("DLL: <parse_data> None type encountered while parsing."));
                     break;
-                default:
-                    write_err_log(std::runtime_error("DLL: <parse_data> Invalid type encountered while parsing."));
-                    return false;
                 }
             }
 
@@ -1666,24 +1663,33 @@ namespace burn_in_data_report
                     std = std_diff(data, mean);
                     break;
                 }
+                case DataType::STRING: {
+                    mean = std::numeric_limits<double>::signaling_NaN();
+                    std = std::numeric_limits<double>::signaling_NaN();
+                    break;
+                }
+                case DataType::NONE:
+                    break;
                 }
 
 #ifdef DEBUG
                 print(std::format("- mean: {}, std: {}.", mean, std), 4);
 #endif
 
+                using dur = std::chrono::duration<double, std::chrono::seconds::period>;
                 if ( std > (0.25 * mean) ) {
 #ifdef DEBUG
                     print("- Failed to automatically detect interval.", 3);
 #endif
-                    std::runtime_error err("Failed to detect consistent measurement interval.");
-                    throw err;
+                    write_err_log( std::runtime_error("<parse_data> Failed to detect consistent measurement interval."));
+                    settings.set_measurement_period(std::chrono::duration_cast<nano>(dur { mean }));   
                 }
+                else {
 #ifdef DEBUG
-                print(std::format("- Automatically detect interval: {}.", mean), 3);
+                    print(std::format("- Automatically detect interval: {}.", mean), 3);
 #endif
-                using dur = std::chrono::duration<double, std::chrono::seconds::period>;
-                settings.set_measurement_period(std::chrono::duration_cast<nano>(dur { mean }));
+                    settings.set_measurement_period(std::chrono::duration_cast<nano>(dur { mean }));
+                }
             }
 
             ints_len = 0, doubles_len = 0, strings_len = 0;

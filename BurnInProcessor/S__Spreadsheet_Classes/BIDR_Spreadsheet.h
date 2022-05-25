@@ -18,42 +18,54 @@ namespace burn_in_data_report
     class spreadsheet
     {
     private:
-        file_data                                  file_;
+        file_data file_;
         std::vector<std::pair<uinteger, uinteger>> filters_;
         // filter currently applied to data
 
-        IMap                            int_data_; // int data
-        DMap                            i_errors_; // int error vals
-        DMap                            double_data_; // double data
-        DMap                            d_errors_; // double error vals
-        SMap                            string_data_; // string data
-        DMap                            s_errors_; // string error vals (always filled with NaN)
+        IMap int_data_; // int data
+        DMap i_errors_; // int error vals
+        DMap double_data_; // double data
+        DMap d_errors_; // double error vals
+        SMap string_data_; // string data
+        DMap s_errors_; // string error vals (always filled with NaN)
         std::map<std::string, DataType> type_map_; // Maps keys to data type
 
-        uinteger      n_rows_;
+        uinteger n_rows_;
         reduction_type reduction_type_; // Vars for reduced data
-        avg_type      average_type_;
-        uinteger      n_group_;
-        uinteger      n_points_;
+        avg_type average_type_;
+        uinteger n_group_;
+        uinteger n_points_;
 
         // Flag to check if global variable for dll
         // is initialized
         bool initialized_;
 
+        [[nodiscard]] bool
+        update_n_rows();
+
+        bool
+        apply_reduction(
+            const std::string& _key,
+            const reduction_type& _r_type = reduction_type::DEFAULT,
+            const avg_type& _a_type = avg_type::stable_mean,
+            const uinteger& _n_group = 1,
+            const uinteger& _n_points = 0
+        ) noexcept;
+
     public:
         spreadsheet();
         explicit
         spreadsheet( const std::vector<std::string>& filenames,
-                     const std::string&              config_loc_name,
-                     const uinteger&                 max_header_sz,
-                     const double&                   max_off_time_minutes,
-                     const bool&                     do_trimming );
+                     const std::string& config_loc_name,
+                     const uinteger& max_header_sz,
+                     const double& max_off_time_minutes,
+                     const bool& do_trimming );
         explicit
         spreadsheet( const std::vector<std::filesystem::directory_entry>& files,
-                     const std::filesystem::directory_entry&              config_loc,
-                     const uinteger&                                      max_header_sz,
-                     const nano&                                          max_off_time,
-                     const bool&                                          do_trimming );
+                     const std::filesystem::directory_entry& config_loc,
+                     const uinteger& max_header_sz,
+                     const nano& max_off_time,
+                     const bool& do_trimming );
         explicit
         spreadsheet( const spreadsheet& other );
         spreadsheet&
@@ -68,10 +80,10 @@ namespace burn_in_data_report
         bool
         load_files(
             const std::vector<std::filesystem::directory_entry>& files,
-            const std::string&                                   f_key,
-            const std::filesystem::directory_entry&              config_loc,
-            const uinteger&                                      header_max_lim,
-            const nano&                                          max_off_time
+            const std::string& f_key,
+            const std::filesystem::directory_entry& config_loc,
+            const uinteger& header_max_lim,
+            const nano& max_off_time
         ) noexcept;
         bool
         add_file( const std::filesystem::directory_entry& file ) noexcept;
@@ -98,27 +110,55 @@ namespace burn_in_data_report
         unload_columns( const std::vector<std::string>& _keys ) noexcept;
         bool
         filter( const std::string& _key,
-                const double&      _cutoff,
-                const uinteger&    _n,
-                const uinteger&    _max_range_sz ) noexcept;
-        template <typename T>
+                const double& _cutoff,
+                const uinteger& _n,
+                const uinteger& _max_range_sz ) noexcept;
+
         bool
-        apply_reduction(
-            const std::string&   _key,
-            const reduction_type& _r_type   = reduction_type::DEFAULT,
-            const avg_type&      _a_type   = avg_type::stable_mean,
-            const uinteger&      _n_group  = 1,
-            const uinteger&      _n_points = 0
-        ) noexcept;
+        reduce( const reduction_type& r_type,
+                const avg_type& a_type,
+                const uinteger& n_group,
+                const uinteger& n_points ) noexcept;
 
         bool
         clear_spreadsheet() noexcept;
 
         [[nodiscard]] uinteger
-        size() const noexcept { return n_rows_; }
+        n_rows() const noexcept {
+            if ( filters_.empty() ) {
+                return n_rows_;
+            }
+            else {
+                uinteger size =
+                    std::accumulate(filters_.cbegin(), filters_.cend(),
+                                    static_cast<uinteger>(0),
+                                    [](uinteger x, const std::pair<uinteger, uinteger>& p)
+                                    { return x + (p.second - p.first); });
+                return size;
+            }
+        }
 
         [[nodiscard]] bool
         is_initialized() const noexcept { return initialized_; }
+
+        [[nodiscard]] std::vector<integer>
+        get_i( const std::string& key ) const noexcept;
+
+        [[nodiscard]] std::vector<double>
+        get_d( const std::string& key ) const noexcept;
+
+        [[nodiscard]] std::vector<std::string>
+        get_s( const std::string& key ) const noexcept;
+
+        [[nodiscard]] std::vector<double>
+        get_error( const std::string& key ) const noexcept;
+
+        [[nodiscard]] bool
+        contains( const std::string& key ) const noexcept;
+
+        [[nodiscard]] DataType
+        type( const std::string& key ) const noexcept;
+
     };
 
 
@@ -133,80 +173,81 @@ namespace burn_in_data_report
 
     inline
     spreadsheet::spreadsheet( const std::vector<std::string>& filenames,
-                              const std::string&              config_loc_name,
-                              const uinteger&                 max_header_sz        = 256,
-                              const double&                   max_off_time_minutes = 5.0,
-                              const bool&                     do_trimming          = true ) :
+                              const std::string& config_loc_name,
+                              const uinteger& max_header_sz = 256,
+                              const double& max_off_time_minutes = 5.0,
+                              const bool& do_trimming = true ) :
         n_rows_(0),
         reduction_type_(reduction_type::DEFAULT),
         average_type_(avg_type::stable_mean),
         n_group_(1),
         n_points_(0),
-        initialized_(true) {
+        initialized_(false) {
         try {
+            write_log("Initializing spreadsheet.");
             std::vector<std::filesystem::directory_entry> files {};
             for ( const auto& filename : filenames ) {
                 std::filesystem::directory_entry file { filename };
                 if ( file.exists() && file.is_regular_file() ) { files.push_back(file); }
             }
             const std::filesystem::directory_entry config_location {
-                config_loc_name
-            };
-            if ( !config_location.exists() ) {
-                throw std::runtime_error{
-                    std::format( "Failed to find config file location: {}.", config_loc_name )
+                    config_loc_name
                 };
+            if ( !config_location.exists() ) {
+                throw std::runtime_error {
+                        std::format("Failed to find config file location: {}.", config_loc_name)
+                    };
             }
             if ( config_location.hard_link_count() == 0 ) {
-                throw std::runtime_error{
-                    std::format( "Failed to find config file(s) in {}, count = {}.",
-                                 config_loc_name, config_location.hard_link_count() )
-                };
+                throw std::runtime_error {
+                        std::format("Failed to find config file(s) in {}, count = {}.",
+                                    config_loc_name, config_location.hard_link_count())
+                    };
             }
 
             if ( max_off_time_minutes <= 0.0 ) {
-                throw std::runtime_error{
-                    std::format("Invalid time received: {}", max_off_time_minutes)
-                };
+                throw std::runtime_error {
+                        std::format("Invalid time received: {}", max_off_time_minutes)
+                    };
             }
             if ( max_off_time_minutes < 3.0 ) {
-                write_err_log( 
-                    std::runtime_error(
-                        std::format(
-                            "WARNING: If laser is cycling on and off with an off period shorter than {}, all data from the off cycles will be removed.\n",
-                            max_off_time_minutes
-                            )
-                        )
-                    );
+                write_err_log(
+                              std::runtime_error(
+                                                 std::format(
+                                                             "WARNING: If laser is cycling on and off with an off period shorter than {}, all data from the off cycles will be removed.\n",
+                                                             max_off_time_minutes
+                                                            )
+                                                )
+                             );
             }
             using minutes = std::chrono::duration<double, std::ratio<60, 1>>;
             const auto max_off_time =
-                std::chrono::duration_cast<nano>( minutes{ max_off_time_minutes } );
+                std::chrono::duration_cast<nano>(minutes { max_off_time_minutes });
 
             if ( !files.empty() ) {
-
-                file_ = file_data{
-                    files,
-                    config_location,
-                    max_header_sz,
-                    max_off_time,
-                    do_trimming
-                };
+                file_ = file_data {
+                        files,
+                        config_location,
+                        max_header_sz,
+                        max_off_time,
+                        do_trimming
+                    };
+                initialized_ = true;
+                write_log("Spreadsheet initialized.");
             }
+            else { write_log("Initialization failed."); }
         }
-        catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::spreadsheet>" );
-        }
+        catch ( const std::exception& err ) { write_err_log(err, "DLL: <spreadsheet::spreadsheet>"); }
     }
 
     // COMPLETE?
     inline
     spreadsheet::spreadsheet(
         const std::vector<std::filesystem::directory_entry>& files,
-        const std::filesystem::directory_entry&              config_loc,
-        const uinteger&                                      max_header_sz = 256,
-        const nano&                                          max_off_time  = 5min,
-        const bool&                                          do_trimming   = true ) :
+        const std::filesystem::directory_entry& config_loc,
+        const uinteger& max_header_sz = 256,
+        const nano& max_off_time = 5min,
+        const bool& do_trimming = true ) :
         file_(files, config_loc, max_header_sz, max_off_time, do_trimming),
         n_rows_(0),
         reduction_type_(reduction_type::DEFAULT),
@@ -217,20 +258,20 @@ namespace burn_in_data_report
 
     inline spreadsheet&
     spreadsheet::operator=( const spreadsheet& other ) {
-        file_           = other.file_;
-        int_data_       = other.int_data_;
-        i_errors_       = other.i_errors_;
-        double_data_    = other.double_data_;
-        d_errors_       = other.d_errors_;
-        string_data_    = other.string_data_;
-        s_errors_       = other.s_errors_;
-        type_map_       = other.type_map_;
-        n_rows_         = other.n_rows_;
+        file_ = other.file_;
+        int_data_ = other.int_data_;
+        i_errors_ = other.i_errors_;
+        double_data_ = other.double_data_;
+        d_errors_ = other.d_errors_;
+        string_data_ = other.string_data_;
+        s_errors_ = other.s_errors_;
+        type_map_ = other.type_map_;
+        n_rows_ = other.n_rows_;
         reduction_type_ = other.reduction_type_;
-        average_type_   = other.average_type_;
-        n_group_        = other.n_group_;
-        n_points_       = other.n_points_;
-        initialized_    = other.initialized_;
+        average_type_ = other.average_type_;
+        n_group_ = other.n_group_;
+        n_points_ = other.n_points_;
+        initialized_ = other.initialized_;
 
         return *this;
     }
@@ -250,24 +291,24 @@ namespace burn_in_data_report
         average_type_(other.average_type_),
         n_group_(other.n_group_),
         n_points_(other.n_points_),
-        initialized_(other.initialized_){}
+        initialized_(other.initialized_) {}
 
     inline spreadsheet&
     spreadsheet::operator=( spreadsheet&& other ) noexcept {
-        file_           = std::move(other.file_);
-        int_data_       = std::move(other.int_data_);
-        i_errors_       = std::move(other.i_errors_);
-        double_data_    = std::move(other.double_data_);
-        d_errors_       = std::move(other.d_errors_);
-        string_data_    = std::move(other.string_data_);
-        s_errors_       = std::move(other.s_errors_);
-        type_map_       = std::move(other.type_map_);
-        n_rows_         = other.n_rows_;
+        file_ = std::move(other.file_);
+        int_data_ = std::move(other.int_data_);
+        i_errors_ = std::move(other.i_errors_);
+        double_data_ = std::move(other.double_data_);
+        d_errors_ = std::move(other.d_errors_);
+        string_data_ = std::move(other.string_data_);
+        s_errors_ = std::move(other.s_errors_);
+        type_map_ = std::move(other.type_map_);
+        n_rows_ = other.n_rows_;
         reduction_type_ = other.reduction_type_;
-        average_type_   = other.average_type_;
-        n_group_        = other.n_group_;
-        n_points_       = other.n_points_;
-        initialized_    = other.initialized_;
+        average_type_ = other.average_type_;
+        n_group_ = other.n_group_;
+        n_points_ = other.n_points_;
+        initialized_ = other.initialized_;
 
         return *this;
     }
@@ -289,22 +330,95 @@ namespace burn_in_data_report
         n_points_(other.n_points_),
         initialized_(other.initialized_) {}
 
+    [[nodiscard]] inline bool
+    spreadsheet::update_n_rows() {
+        bool result{ true };
+        uinteger size{ 0 };
+        write_log("update_n_rows:");
+
+        for ( const auto& [key, type] : type_map_ ) {
+            write_log(std::format("({}, {}):", key, type_string.at(type)));
+            switch ( type ) {
+            case DataType::INTEGER: {
+                if ( size == 0 ) {
+                    size = int_data_.at(key).size();
+                    write_log(std::format("\tsetting size = {}", size));
+                }
+                else {
+                    if ( size != int_data_.at(key).size() ) {
+                        write_log(std::format("\tsize = {}, data size = {}", size, int_data_.at(key).size()));
+                        write_err_log( std::runtime_error("\tDLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                        result = false;
+                    }
+                    else {
+                        write_log(std::format("\t{}", size));
+                    }
+                }
+            }
+                break;
+            case DataType::DOUBLE: {
+                if ( size == 0 ) {
+                    size = double_data_.at(key).size();
+                    write_log(std::format("\tsetting size = {}", size));
+                }
+                else {
+                    if ( size != double_data_.at(key).size() ) {
+                        write_log(std::format("\tsize = {}, data size = {}", size, double_data_.at(key).size()));
+                        write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                        result = false;
+                    }
+                    else {
+                        write_log(std::format("\t{}", size));
+                    }
+                }
+            }
+                break;
+            case DataType::STRING: {
+                if ( size == 0 ) {
+                    size = string_data_.at(key).size();
+                    write_log(std::format("\tsetting size = {}", size));
+                }
+                else {
+                    if ( size != string_data_.at(key).size() ) {
+                        write_log(std::format("\tsize = {}, data size = {}", size, string_data_.at(key).size()));
+                        write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                        result = false;
+                    }
+                    else {
+                        write_log(std::format("\t{}", size));
+                    }
+                }
+            }
+                break;
+            case DataType::NONE:
+                result = false;
+                break;
+            }
+        }
+
+        if ( result ) {
+            n_rows_ = size;
+        }
+
+        return result;
+    }
+
     // COMPLETE?
     inline bool
     spreadsheet::load_files(
         const std::vector<std::filesystem::directory_entry>& files,
-        const std::string&                                   f_key      = "PDOF 1",
-        const std::filesystem::directory_entry&              config_loc =
+        const std::string& f_key = "PDOF 1",
+        const std::filesystem::directory_entry& config_loc =
             std::filesystem::directory_entry { "" },
         const uinteger& header_max_lim = 256,
-        const nano&     max_off_time   = 5min
+        const nano& max_off_time = 5min
     ) noexcept {
         try {
             file_ = file_data { files, config_loc, header_max_lim, max_off_time };
             return check_valid_state(file_.get_load_info());
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::load_files");
+            write_err_log(err, "DLL: <spreadsheet::load_files");
             return false;
         }
     }
@@ -314,7 +428,7 @@ namespace burn_in_data_report
     spreadsheet::add_file( const std::filesystem::directory_entry& file ) noexcept {
         try { return file_.add_file(file); }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::add_file>" );
+            write_err_log(err, "DLL: <spreadsheet::add_file>");
             return false;
         }
     }
@@ -325,7 +439,7 @@ namespace burn_in_data_report
         const std::vector<std::filesystem::directory_entry>& files ) noexcept {
         try { return file_.add_files(files); }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::add_files>" );
+            write_err_log(err, "DLL: <spreadsheet::add_files>");
             return false;
         }
     }
@@ -335,7 +449,7 @@ namespace burn_in_data_report
     spreadsheet::remove_file( const uinteger& index ) noexcept {
         try { return file_.remove_file(index); }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::remove_file>" );
+            write_err_log(err, "DLL: <spreadsheet::remove_file>");
             return false;
         }
     }
@@ -345,14 +459,13 @@ namespace burn_in_data_report
     spreadsheet::remove_files( const std::vector<uinteger>& indexes ) noexcept {
         try { return file_.remove_files(indexes); }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::remove_files" );
+            write_err_log(err, "DLL: <spreadsheet::remove_files");
             return false;
         }
     }
 
     // COMPLETE?
-    template <typename T>
-    bool
+    inline bool
     spreadsheet::apply_reduction(
         // Column title
         const std::string& _key,
@@ -375,26 +488,42 @@ namespace burn_in_data_report
             if ( !type_map_.contains(_key) )
                 return false;
 
-            // get current no. rows. Will be updated as reductions applied
-            uinteger no_rows { file_.get_n_rows() };
-
-            // No reduction if bit 0 isn't set (& no_rows < the max)
-            if ( _r_type == reduction_type::none &&
-                 no_rows < MAX_ROWS )
-                return true;
-
-            std::vector<integer>     i_reduced;
-            std::vector<double>      d_reduced;
+            std::vector<integer> i_reduced;
+            std::vector<double> d_reduced;
             std::vector<std::string> s_reduced;
-            std::vector<double>      std_deviations;
-            const DataType           type = type_map_.at(_key);
+            std::vector<double> std_deviations;
+            auto filters_copy(filters_);
+            const DataType type = type_map_.at(_key);
+
+            // get current no. rows. Will be updated as reductions applied
+            uinteger no_rows;
+            switch ( type ) {
+            case DataType::INTEGER:
+                no_rows = int_data_.at(_key).size();
+                break;
+            case DataType::DOUBLE:
+                no_rows = double_data_.at(_key).size();
+                break;
+            case DataType::STRING:
+                no_rows = string_data_.at(_key).size();
+                break;
+            case DataType::NONE:
+                break;
+            }
+
+            // No reduction if it isn't set & no_rows < MAX_ROWS
+            // If no_rows > MAX_ROWS, MUST be reduced to fit in excel
+            if ( _r_type == reduction_type::none && no_rows < MAX_ROWS )
+                return true;
 
             // Average by each cycle, this will likely always be true
             // Still may be useful to have the option to not use it
-            if ( !filters_.empty() ) {
+            if ( !filters_copy.empty() ) {
 
                 // Need to think of acceptable way to do strings
-                // For now will use lambda which returns NaN
+                // For now will use lambda which returns NaN values
+                // As it doesn't make much sense to "take the average
+                // of a string"
 
                 // Calculate averages
                 switch ( type ) {
@@ -407,7 +536,7 @@ namespace burn_in_data_report
                             std_deviations = i_errors_.at(_key);
 
                         const auto& [mean_values, std_deviation_values] =
-                            cycle_average(int_data_.at(_key), filters_,
+                            cycle_average(int_data_.at(_key), filters_copy,
                                           std_deviations, mean, stdev);
 
                         int_data_[_key].clear();
@@ -427,7 +556,7 @@ namespace burn_in_data_report
 
                         const auto& [median_values, std_deviation_values] =
                             cycle_average(int_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           median,
                                           stdev);
@@ -450,7 +579,7 @@ namespace burn_in_data_report
                         const auto& [s_mean_values, s_std_deviation_values] =
                             cycle_average(
                                           int_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           stable_mean,
                                           stable_stdev);
@@ -473,7 +602,7 @@ namespace burn_in_data_report
                         const auto& [s_median_values, s_std_deviation_values] =
                             cycle_average(
                                           int_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           stable_median,
                                           stable_stdev);
@@ -488,6 +617,7 @@ namespace burn_in_data_report
                         break;
                     }
                     }
+                    no_rows = int_data_.at(_key).size();
                     break;
                 }
                 case DataType::DOUBLE: {
@@ -501,13 +631,13 @@ namespace burn_in_data_report
                         const auto& [mean_values, std_deviation_values] =
                             cycle_average(
                                           double_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           mean,
                                           stdev);
 
                         double_data_[_key] = mean_values;
-                        d_errors_[_key]    = std_deviation_values;
+                        d_errors_[_key] = std_deviation_values;
                         break;
                     }
                     case avg_type::overall_median: {
@@ -518,13 +648,13 @@ namespace burn_in_data_report
 
                         const auto& [median_values, std_deviation_values] =
                             cycle_average(double_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           median,
                                           stdev);
 
                         double_data_[_key] = median_values;
-                        d_errors_[_key]    = std_deviation_values;
+                        d_errors_[_key] = std_deviation_values;
                         break;
                     }
                     case avg_type::stable_mean: {
@@ -535,13 +665,12 @@ namespace burn_in_data_report
 
                         const auto& [s_mean_values, s_std_deviation_values] =
                             cycle_average(double_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           stable_mean,
                                           stable_stdev);
-
                         double_data_[_key] = s_mean_values;
-                        d_errors_[_key]    = s_std_deviation_values;
+                        d_errors_[_key] = s_std_deviation_values;
                         break;
                     }
                     case avg_type::stable_median: {
@@ -553,58 +682,68 @@ namespace burn_in_data_report
                         auto [s_median_values, s_std_deviation_values] =
                             cycle_average(
                                           double_data_.at(_key),
-                                          filters_,
+                                          filters_copy,
                                           std_deviations,
                                           stable_median,
                                           stable_stdev);
 
                         double_data_[_key] = s_median_values;
-                        d_errors_[_key]    = s_std_deviation_values;
+                        d_errors_[_key] = s_std_deviation_values;
                         break;
                     }
                     }
+                    no_rows = double_data_.at(_key).size();
+                    
                     break;
                 }
                 case DataType::STRING: {
                     // TODO: Find a better solution for this?
                     // Currently just return NaN
-                    const auto&              data = string_data_.at(_key);
+                    const auto& data = string_data_.at(_key);
+
                     std::vector<std::string> tmp;
-                    tmp.reserve(filters_.size());
-                    for ( const auto& [first, last] : filters_ ) {
+                    tmp.reserve(filters_copy.size());
+
+                    for ( const auto& [first, last] : filters_copy ) {
                         uinteger idx { (last - first) / 2 };
                         tmp.emplace_back(data[idx]);
                     }
+
                     string_data_[_key] = tmp;
-                    s_errors_[_key]    =
-                        std::vector(filters_.size(),
+                    s_errors_[_key] =
+                        std::vector(filters_copy.size(),
                                     std::numeric_limits<double>::signaling_NaN());
+
+                    no_rows = string_data_.at(_key).size();
                     break;
                 }
                 case DataType::NONE: { break; }
                 }
 
-                no_rows = filters_.size();
-                // Clear filters now cycles have been
-                // avg'd into single datapoints
-                filters_.clear();
+                // Clear filter now cycles have been
+                // avg'd into single data points
+                filters_copy.clear();
+
+                write_log("Done.");
             }
 
             // Average by groups of n_group_ points
-            if ( ( _r_type == reduction_type::ngroup 
-                || _r_type == reduction_type::all )
+            if ( (_r_type == reduction_type::ngroup
+                  || _r_type == reduction_type::all)
                  && _n_group > 0
                  && _n_group < file_.get_n_rows() ) {
+                write_log("Averaging by group...");
+
                 // Tmp storage to pass to AVG function
 
                 // Lambda function to handle averaging
                 auto avg
                     = []<typename K>
-                ( const std::vector<K>&                             data,
-                  std::vector<K>&                                   reduced_storage,
-                  std::vector<double>&                              std_deviations,
+                ( const std::vector<K>& data,
+                  std::vector<K>& reduced_storage,
+                  std::vector<double>& std_deviations,
                   const std::vector<std::pair<uinteger, uinteger>>& filters,
-                  const uinteger&                                   n_group )
+                  const uinteger& n_group )
                 -> bool {
                     try {
                         // Clear any existing data in results storage
@@ -612,7 +751,7 @@ namespace burn_in_data_report
                             reduced_storage.clear();
 
                         // Storage for copy of data about to be reduced
-                        std::vector<K>      tmp;
+                        std::vector<K> tmp;
                         std::vector<double> std_deviation_tmp;
 
                         /*
@@ -624,7 +763,7 @@ namespace burn_in_data_report
                             uinteger sz = std::accumulate(
                                                           filters.cbegin(), filters.cend(),
                                                           static_cast<uinteger>( 0 ),
-                                                          []( const uinteger&                      lhs,
+                                                          []( const uinteger& lhs,
                                                               const std::pair<uinteger, uinteger>& rhs ) {
                                                               return lhs + (rhs.second - rhs.first);
                                                           }
@@ -645,7 +784,7 @@ namespace burn_in_data_report
                             std_deviation_tmp.shrink_to_fit();
                         }
                         else {
-                            tmp               = data;
+                            tmp = data;
                             std_deviation_tmp = std_deviations;
                         }
 
@@ -698,7 +837,7 @@ namespace burn_in_data_report
                         return true;
                     }
                     catch ( const std::exception& err ) {
-                        write_err_log( err, "DLL: <spreadsheet::apply_reduction::avg>");
+                        write_err_log(err, "DLL: <spreadsheet::apply_reduction::avg>");
                         return false;
                     }
                 };
@@ -711,7 +850,10 @@ namespace burn_in_data_report
                     else
                         std_deviations.clear();
 
-                    avg(int_data_.at(_key), i_reduced, std_deviations, filters_,
+                    avg(int_data_.at(_key),
+                        i_reduced,
+                        std_deviations,
+                        filters_copy,
                         _n_group);
 
                     int_data_[_key] = i_reduced;
@@ -725,18 +867,18 @@ namespace burn_in_data_report
                     avg(double_data_.at(_key),
                         d_reduced,
                         std_deviations,
-                        filters_,
+                        filters_copy,
                         _n_group);
 
                     double_data_[_key] = d_reduced;
-                    d_errors_[_key]    = std_deviations;
+                    d_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::STRING: {
-                    auto&    data { string_data_.at(_key) };
+                    auto& data { string_data_.at(_key) };
                     uinteger sz;
-                    if ( !filters_.empty() ) {
-                        sz = std::accumulate(filters_.cbegin(), filters_.cend(),
+                    if ( !filters_copy.empty() ) {
+                        sz = std::accumulate(filters_copy.cbegin(), filters_copy.cend(),
                                              static_cast<uinteger>( 0 ),
                                              []( const uinteger& lhs,
                                                  const std::pair<uinteger, uinteger>
@@ -771,31 +913,33 @@ namespace burn_in_data_report
                                           std::numeric_limits<double>::signaling_NaN()
                                          );
                     string_data_[_key] = s_reduced;
-                    s_errors_[_key]    = std_deviations;
+                    s_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::NONE: { break; }
                 }
+
+                write_log("Done.");
             }
 
             // Average if no_rows > _max_points (user specified) OR no_rows > MAX_ROWS (excel specified)
             // (Is this test type selected? and parameter n_points_ is valid?
             // OR is n_points_ > MAX_ROWS OR is _no_rows (pre-averaging) > MAX_ROWS
             if ( (_r_type == reduction_type::npoints ||
-                 _r_type == reduction_type::all ) &&
+                  _r_type == reduction_type::all) &&
                  _n_points > 0 &&
                  _n_points < file_.get_n_rows() ||
                  _n_points > MAX_ROWS ||
                  no_rows > MAX_ROWS ) {
                 auto avg =
                     []<ArithmeticType R>
-                ( const std::vector<R>&                             data,
-                  std::vector<R>&                                   reduced_storage,
-                  std::vector<double>&                              stdevs,
+                ( const std::vector<R>& data,
+                  std::vector<R>& reduced_storage,
+                  std::vector<double>& stdevs,
                   const std::vector<std::pair<uinteger, uinteger>>& filters,
-                  const uinteger&                                   _n_points ) -> void {
+                  const uinteger& _n_points ) -> void {
                     // Storage for tmp data
-                    std::vector<R>      tmp;
+                    std::vector<R> tmp;
                     std::vector<double> std_deviation_tmp;
 
                     uinteger sz { 0 };
@@ -864,7 +1008,7 @@ namespace burn_in_data_report
                     std_deviation_tmp.shrink_to_fit();
 
                     reduced_storage = tmp;
-                    stdevs          = std_deviation_tmp;
+                    stdevs = std_deviation_tmp;
                 };
 
                 switch ( type ) {
@@ -877,7 +1021,7 @@ namespace burn_in_data_report
                     avg(int_data_.at(_key),
                         i_reduced,
                         std_deviations,
-                        filters_,
+                        filters_copy,
                         _n_points);
 
                     int_data_[_key] = i_reduced;
@@ -893,18 +1037,18 @@ namespace burn_in_data_report
                     avg(double_data_.at(_key),
                         d_reduced,
                         std_deviations,
-                        filters_,
+                        filters_copy,
                         _n_points);
 
                     double_data_[_key] = d_reduced;
-                    d_errors_[_key]    = std_deviations;
+                    d_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::STRING: {
-                    auto&    data = string_data_.at(_key);
+                    auto& data = string_data_.at(_key);
                     uinteger sz;
                     if ( !filters_.empty() ) {
-                        sz = std::accumulate(filters_.cbegin(), filters_.cend(),
+                        sz = std::accumulate(filters_copy.cbegin(), filters_copy.cend(),
                                              static_cast<uinteger>( 0 ),
                                              []( uinteger lhs,
                                                  const std::pair<uinteger, uinteger>
@@ -945,17 +1089,53 @@ namespace burn_in_data_report
                                           std::numeric_limits<double>::signaling_NaN()
                                          );
                     string_data_[_key] = s_reduced;
-                    s_errors_[_key]    = std_deviations;
+                    s_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::NONE: { break; }
                 }
+
+                write_log("Done.");
             }
 
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::apply_reduction>" );
+            write_err_log(err, "DLL: <spreadsheet::apply_reduction>");
+            return false;
+        }
+    }
+
+    inline bool
+    spreadsheet::reduce( const reduction_type& r_type,
+                         const avg_type& a_type,
+                         const uinteger& n_group,
+                         const uinteger& n_points ) noexcept {
+        try {
+            write_log(std::format("Reducing data... (current size: {})", n_rows_));
+
+            bool result { true };
+
+            for ( const auto& key : type_map_ | std::views::keys ) {
+                write_log(std::format("Reducing {}...", key));
+                result &= apply_reduction(key, r_type, a_type, n_group, n_points);
+                write_log(result
+                              ? "Success."
+                              : "Fail.");
+            }
+
+            result &= update_n_rows();
+
+            if ( result ) {
+                filters_.clear();
+            }
+
+            write_log(std::format("Done. (new size: {})", n_rows_));
+
+            return result;
+        }
+        catch ( const std::exception& err ) {
+            write_err_log(err, "DLL: <spreadsheet::reduce>");
             return false;
         }
     }
@@ -975,7 +1155,7 @@ namespace burn_in_data_report
             return cols;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::get_current_cols>" );
+            write_err_log(err, "DLL: <spreadsheet::get_current_cols>");
             return std::vector<std::string> {};
         }
     }
@@ -985,7 +1165,7 @@ namespace burn_in_data_report
     spreadsheet::get_available_cols() const noexcept {
         try { return file_.get_col_titles(); }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::get_available_cols>" );
+            write_err_log(err, "DLL: <spreadsheet::get_available_cols>");
             return std::vector<std::string> {};
         }
     }
@@ -1001,8 +1181,10 @@ namespace burn_in_data_report
                 if ( key == _key ) {
                     if ( type_map_.contains(key) ) {
                         // Column is already loaded, exit
+                        write_log(std::format("<spreadsheet::load_column> Column already exists ({})", _key));
                         return true;
                     }
+                    write_log(std::format("<spreadsheet::load_column> Loading {}", _key));
                     dtype = type;
                     break;
                 }
@@ -1010,46 +1192,56 @@ namespace burn_in_data_report
 
             if ( dtype == DataType::NONE ) {
                 // key doesn't exist hmm, should probably call some sort of error here
+                write_log(std::format("<spreadsheet::load_column> Column not found ({})", _key));
                 return false;
             }
+
+            bool flag { true };
 
             // Load unfiltered data, then:
             // Apply filters & reductions
             switch ( dtype ) {
             case DataType::INTEGER: {
+                if ( !update_n_rows() ) {
+                    throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
+                }
                 int_data_[_key] = file_.get_i(_key);
                 i_errors_[_key] = {};
-                apply_reduction<integer>(_key,
-                                         reduction_type_,
-                                         average_type_,
-                                         n_group_,
-                                         n_points_);
+                apply_reduction(_key,
+                                reduction_type_,
+                                average_type_,
+                                n_group_,
+                                n_points_);
                 break;
             }
             case DataType::DOUBLE: {
+                if ( !update_n_rows() ) {
+                    throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
+                }
                 double_data_[_key] = file_.get_d(_key);
-                d_errors_[_key]    = {};
-                apply_reduction<double>(
-                                        _key,
-                                        reduction_type_,
-                                        average_type_,
-                                        n_group_,
-                                        n_points_
-                                       );
+                d_errors_[_key] = {};
+                apply_reduction(_key,
+                                reduction_type_,
+                                average_type_,
+                                n_group_,
+                                n_points_);
                 break;
             }
             case DataType::STRING: {
+                if ( !update_n_rows() ) {
+                    throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
+                }
                 string_data_[_key] = file_.get_s(_key);
-                s_errors_[_key]    = {};
-                apply_reduction<std::string>(
-                                             _key,
-                                             reduction_type_,
-                                             average_type_,
-                                             n_group_,
-                                             n_points_
-                                            );
+                s_errors_[_key] = {};
+                apply_reduction(_key,
+                                reduction_type_,
+                                average_type_,
+                                n_group_,
+                                n_points_);
                 break;
             }
+            case DataType::NONE:
+                break;
             }
 
             // Add to type_map_
@@ -1058,7 +1250,7 @@ namespace burn_in_data_report
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::load_column>" );
+            write_err_log(err, "DLL: <spreadsheet::load_column>");
             return false;
         }
     }
@@ -1067,18 +1259,19 @@ namespace burn_in_data_report
     inline bool
     spreadsheet::load_columns( const std::vector<std::string>& _keys ) noexcept {
         try {
-            bool result{ true };
-            for ( const auto& key : _keys )
-            {
+            bool result { true };
+            for ( const auto& key : _keys ) {
                 write_log(std::format("<spreadsheet::load_columns> loading: {}", key));
                 result &= load_column(key);
-                write_log(std::format("{}", result ? "success" : "failure"));
+                write_log(std::format("{}", result
+                                                ? "success"
+                                                : "failure"));
             }
 
             return result;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::load_columns>" );
+            write_err_log(err, "DLL: <spreadsheet::load_columns>");
             return false;
         }
     }
@@ -1093,11 +1286,14 @@ namespace burn_in_data_report
             * - Remove from relevant *_errors column
             */
 
-            const auto type_data_iter{ type_map_.find(_key) };
+            const auto type_data_iter { type_map_.find(_key) };
 
             // Invalid _key
-            if ( type_data_iter == type_map_.end() )
+            if ( type_data_iter == type_map_.end() ) {
+                write_log(std::format("<spreadsheet::unload_column> Column not found ({})", _key));
                 return false;
+            }
+            write_log(std::format("<spreadsheet::unload_column> Column found ({})", _key));
             const auto d_type = type_data_iter->second;
             type_map_.erase(type_data_iter);
 
@@ -1116,14 +1312,14 @@ namespace burn_in_data_report
                 s_errors_.erase(_key);
                 break;
             case DataType::NONE:
-                write_err_log( std::runtime_error("DLL: <spreadsheet::unload_column> NONE type received.") );
+                write_err_log(std::runtime_error("DLL: <spreadsheet::unload_column> NONE type received."));
                 return false;
             }
 
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::unload_column>" );
+            write_err_log(err, "DLL: <spreadsheet::unload_column>");
             return false;
         }
     }
@@ -1136,12 +1332,14 @@ namespace burn_in_data_report
             for ( const auto& key : _keys ) {
                 write_log(std::format("<spreadsheet::unload_columns> loading: {}", key));
                 result &= unload_column(key);
-                write_log(std::format("{}", result ? "success" : "failure"));
+                write_log(std::format("{}", result
+                                                ? "success"
+                                                : "failure"));
             }
             return result;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::unload_columns>" );
+            write_err_log(err, "DLL: <spreadsheet::unload_columns>");
             return false;
         }
     }
@@ -1149,9 +1347,9 @@ namespace burn_in_data_report
     // COMPLETE?
     inline bool
     spreadsheet::filter( const std::string& _key,
-                         const double&      _cutoff,
-                         const uinteger&    _n            = 2,
-                         const uinteger&    _max_range_sz = 0 ) noexcept {
+                         const double& _cutoff,
+                         const uinteger& _n = 2,
+                         const uinteger& _max_range_sz = 0 ) noexcept {
         try {
             // Check valid cutoff fraction & that _key exists / has been loaded
             assert(
@@ -1173,10 +1371,10 @@ namespace burn_in_data_report
 
             // Map key --> cutoff value for filter
             std::map<std::string, integer> int_cutoff;
-            std::map<std::string, double>  double_cutoff;
+            std::map<std::string, double> double_cutoff;
 
             // Calculate cutoff values as fraction of max datapoint
-            auto                                            check_MAX =
+            auto check_MAX =
                 []<ArithmeticType T>( const std::vector<T>& data ) -> T {
                 assert(!data.empty());
                 T max { data[0] };
@@ -1214,9 +1412,9 @@ namespace burn_in_data_report
             const auto ExtractRanges =
                 []<ArithmeticType T>(
                 const std::vector<T>& _data,
-                const T&              _threshold,
-                const uinteger&       _n            = 1,
-                const uinteger&       _max_range_sz = 0
+                const T& _threshold,
+                const uinteger& _n = 1,
+                const uinteger& _max_range_sz = 0
             ) -> std::vector<std::pair<uinteger, uinteger>> {
                 /*
                 * - results: Stores resulting {start point, end point} pairs.
@@ -1231,16 +1429,16 @@ namespace burn_in_data_report
                 */
                 std::vector<std::pair<uinteger, uinteger>> results;
                 results.reserve(_data.size() / 10);
-                bool     continuous_range { false };
+                bool continuous_range { false };
                 uinteger r_start { 0 }, r_end { 0 }, count { 0 };
                 for ( uinteger i = 0; i < _data.size(); ++i ) {
                     uinteger branch { 0 };
-                    branch += ((_data[i] >= _threshold)
+                    branch += _data[i] >= _threshold
                                    ? 2
-                                   : 1);
-                    branch += ((continuous_range)
+                                   : 1;
+                    branch += continuous_range
                                    ? 1
-                                   : -1);
+                                   : -1;
 
                     switch ( branch ) {
                     case 0:
@@ -1263,7 +1461,7 @@ namespace burn_in_data_report
                         continuous_range = count >= _n;
                         if ( continuous_range ) {
                             r_start = i - count + 1;
-                            count   = 0;
+                            count = 0;
                         }
                         break;
                     case 2:
@@ -1275,7 +1473,7 @@ namespace burn_in_data_report
                         count++;
                         continuous_range = !(count >= _n);
                         if ( !continuous_range ) {
-                            r_end                = i - count + 1;
+                            r_end = i - count + 1;
                             const auto subranges = sub_range_split(
                                                                    _data, r_start, r_end, _max_range_sz);
 
@@ -1301,7 +1499,7 @@ namespace burn_in_data_report
                     * Handle case where a valid range reaches to the end of the data
                     * without transitioning back below the threshold.
                     */
-                    r_end                = _data.size() - 1;
+                    r_end = _data.size() - 1;
                     const auto subranges = sub_range_split(
                                                            _data, r_start, r_end, _max_range_sz);
                     results.insert(results.cend(), subranges.cbegin(),
@@ -1311,8 +1509,8 @@ namespace burn_in_data_report
                 return results;
             };
 
-            switch ( dtype ) {
             // Calculate filters
+            switch ( dtype ) {
             case DataType::INTEGER:
                 filters_ = ExtractRanges(int_data_.at(_key),
                                          int_cutoff.at(_key),
@@ -1323,21 +1521,28 @@ namespace burn_in_data_report
                                          double_cutoff.at(_key),
                                          _n, _max_range_sz);
                 break;
+            case DataType::STRING:
+                filters_ = {};
+                break;
+            case DataType::NONE:
+                write_err_log(std::runtime_error("DLL: <spreadsheet::filter>"));
+                filters_ = {};
+                break;
             }
 
-            // Update n_rows_
-            n_rows_ = std::accumulate(filters_.cbegin(), filters_.cend(),
-                                      static_cast<uinteger>( 0 ),
-                                      []( const uinteger&                      lhs,
-                                          const std::pair<uinteger, uinteger>& rhs ) {
-                                          return lhs + (rhs.second - rhs.first);
-                                      }
-                                     );
+            /*
+             * No need to update n_rows_.
+             * It should represent the size of the data
+             * currently loaded, not the size of the data if
+             * you applied the filter. n_rows_ is then updated
+             * if the underlying data is changed, e.g if
+             * reductions are applied.
+             */
 
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <file_data::filter_data>" );
+            write_err_log(err, "DLL: <file_data::filter_data>");
             return false;
         }
     }
@@ -1361,7 +1566,7 @@ namespace burn_in_data_report
             type_map_.clear();
 
             n_rows_ = 0;
-            reduction_type_ = reduction_type{ 100 };
+            reduction_type_ = reduction_type { 100 };
             average_type_ = avg_type::stable_mean;
             n_group_ = 1;
             n_points_ = 0;
@@ -1371,8 +1576,96 @@ namespace burn_in_data_report
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log( err, "DLL: <spreadsheet::clear_spreadsheet>" );
+            write_err_log(err, "DLL: <spreadsheet::clear_spreadsheet>");
             return false;
+        }
+    }
+
+    inline [[nodiscard]] std::vector<integer>
+    spreadsheet::get_i( const std::string& key ) const noexcept {
+        try {
+            return int_data_.at(key);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::get_i>" );
+            return {};
+        }
+    }
+
+    inline [[nodiscard]] std::vector<double>
+    spreadsheet::get_d( const std::string& key ) const noexcept {
+        try {
+            return double_data_.at(key);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::get_d>" );
+            return {};
+        }
+    }
+
+    inline [[nodiscard]] std::vector<std::string>
+    spreadsheet::get_s( const std::string& key ) const noexcept {
+        try {
+            return string_data_.at(key);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::get_s>" );
+            return {};
+        }
+    }
+
+    inline [[nodiscard]] std::vector<double>
+    spreadsheet::get_error( const std::string& key ) const noexcept {
+        try {
+            switch ( type_map_.at(key) ) {
+            case DataType::INTEGER: {
+                return i_errors_.at(key);
+            } break;
+            case DataType::DOUBLE: {
+                return d_errors_.at(key);
+            } break;
+            case DataType::STRING: {
+                return s_errors_.at(key);
+            } break;
+            case DataType::NONE: {
+                return {};
+            }
+            }
+            return {};
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::get_error>" );
+            return {};
+        }
+    }
+
+    inline [[nodiscard]] bool
+    spreadsheet::contains( const std::string& key ) const noexcept {
+        try {
+            return type_map_.contains(key);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::contains>" );
+            return false;
+        }
+    }
+
+    inline [[nodiscard]] DataType
+    spreadsheet::type( const std::string& key ) const noexcept {
+        try {
+            /*
+             * If key exists:
+             *   - Returns correct DataType
+             * If key doesn't exist:
+             *   - std::map::at(...) throws a std::out_of_range exception
+             *     which is caught, logging an error &
+             *     returning DataType::NONE.
+             */
+            return type_map_.at(key);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::type>" );
+            return DataType::NONE;
         }
     }
 

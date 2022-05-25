@@ -75,7 +75,7 @@ write_err_log( const std::exception& err,
     std::fstream err_file(err_log_path,
                     std::ios_base::out | std::ios_base::app);
     const auto extra_msg = (msg == "") ? "" : std::format("{}\n", msg);
-    err_file << std::format("{}INTERNAL ERROR:\t{}",
+    err_file << std::format("{}INTERNAL ERROR:\n{}\n",
                              extra_msg, err.what() );
     err_file.close();
 }
@@ -175,7 +175,7 @@ namespace burn_in_data_report
         return idx;
     }
 
-    const inline std::size_t
+    inline std::size_t
     access_range_checked( const uinteger& idx,
                           const uinteger& min,
                           const uinteger& max ) {
@@ -197,9 +197,12 @@ namespace burn_in_data_report
     template <typename T>
     concept ArithmeticType = std::integral<T> || std::floating_point<T>;
 
-    auto int64_t_hash = typeid(integer).hash_code();
-    auto double_hash  = typeid(double).hash_code();
-    auto string_hash  = typeid(std::string).hash_code();
+    inline const auto
+    int64_t_hash = typeid(integer).hash_code();
+    inline const auto
+    double_hash  = typeid(double).hash_code();
+    inline const auto
+    string_hash  = typeid(std::string).hash_code();
 
     const std::unordered_map<integer, DataType> hash_to_DataType {
             { int64_t_hash, DataType::INTEGER },
@@ -358,8 +361,9 @@ namespace burn_in_data_report
     }
 
     template <typename T>
-    std::function<void( const T& )> default_print =
-        []( const T&                arg ) { std::cout << arg; };
+    const std::function<void( const T& )>
+    default_print =
+        []( const T& arg ) { std::cout << arg; };
 
     template <typename T>
     void
@@ -1276,48 +1280,20 @@ namespace burn_in_data_report
         return bstr_string_convert( _bstr_t( var ) );
     }
 
-    template <typename From, typename To>
+    template <typename From, typename To=From>
     std::vector<To>
     array_convert( const CComSafeArray<From>& csa,
                    const std::function<To(const From&)>& conversion_op ) {
         std::vector<To> result;
         result.reserve(csa.GetCount());
 
-        for ( ULONG i{ 0 }; i < csa.GetCount(); ++i ) {
+        for ( LONG i{ csa.GetLowerBound() }; i < csa.GetUpperBound() + 1; ++i ) {
             result.emplace_back(conversion_op(csa.GetAt(i)));
         }
 
         return result;
     }
-    template <typename From, typename To>
-    std::vector<To>
-    array_convert( From* pData,
-                   const uinteger n_elements ) {
-        // Storage for results
-        std::vector<To> results;
-        results.reserve(n_elements);
-
-        for ( auto ptr = *pData; ptr != (*pData) + n_elements; ++ptr ) {
-            results.emplace_back( static_cast<To>(*ptr) );
-        }
-
-        return results;
-    }
-    template <typename From, typename To>
-    std::vector<To>
-    array_convert( From* pData,
-                   const uinteger n_elements,
-                   const std::function<To(const From&)>& conversion_op) {
-        std::vector<To> results;
-        results.reserve( n_elements );
-
-        for ( auto ptr = pData; ptr != pData + n_elements; ++ptr ) {
-            results.emplace_back( To{conversion_op( *ptr )} );
-        }
-
-        return results;
-    }
-    template <typename From, typename To>
+    template <typename From, typename To=From>
     LPSAFEARRAY
     array_convert( const std::vector<From>& data,
                    const std::function<To(const From&)>& conversion_op,
@@ -1326,20 +1302,9 @@ namespace burn_in_data_report
 
         for ( const auto& [i, x] : enumerate(data) ) {
             sa_result.SetAt( i, conversion_op(x), copy );
-            write_log(std::format("{}: {}", i, x));
         }
 
         return sa_result.Detach();
-    }
-    template <typename T>
-    LPSAFEARRAY
-    array_convert( const T* data,
-                   const LONG n_data ) {
-        CComSafeArray<T> array(n_data);
-        for ( LONG i{ 0 }; i < n_data; ++i ) {
-            array.SetAt(i, data[i]);
-        }
-        return array.Detach();
     }
 
     inline CComSafeArray<BSTR>
