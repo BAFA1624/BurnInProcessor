@@ -22,9 +22,8 @@ namespace burn_in_data_report
                uinteger&                            _lim ) noexcept {
         try {
             uinteger count = 0;
-            while ( count < _lim ) {
-                std::string_view line = _data[count];
-                if ( line_check(line, _pattern) ) {
+            while ( count < _lim && count < _data.size() ) {
+                if ( line_check(_data[count], _pattern) ) {
                     _lim = count;
                     return true;
                 }
@@ -45,7 +44,7 @@ namespace burn_in_data_report
                const std::string_view&              _pattern_str,
                uinteger&                            _lim ) noexcept {
         try {
-            auto pattern = std::regex(std::string { _pattern_str });
+            const auto pattern = std::regex(std::string { _pattern_str });
             return line_check(_data, pattern, _lim);
         }
         catch ( const std::exception& err ) {
@@ -85,7 +84,7 @@ namespace burn_in_data_report
     ) noexcept {
         try {
             uinteger count = 0;
-            while ( count < _lim ) {
+            while ( count < _lim && count < _data.size() ) {
                 if ( line_capture(_data[count], _matches, _pattern) ) { return true; }
                 count++;
             }

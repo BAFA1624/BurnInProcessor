@@ -71,8 +71,8 @@ init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
                   _In_ const double& max_off_time_minutes,
                   _In_ const BOOL& do_trimming ) {
     try {
-        write_log("Initializing spreadsheet...");
         BOOL result = clear_spreadsheet();
+        write_log("Initializing spreadsheet...");
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
                              max_off_time_minutes, do_trimming);
         return result;
@@ -206,9 +206,9 @@ load_column( LPVARIANT v_col_title ) {
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
         write_log(std::format("Loading column: {}", col_title));
         const bool result = spreadsheet.load_column(col_title);
-        write_log((result
+        write_log(result
                        ? "Succeeded"
-                       : "Failed"));
+                       : "Failed");
         return result
                    ? TRUE
                    : FALSE;
@@ -352,11 +352,16 @@ is_initialized() {
 }
 
 uinteger WINAPI
-n_rows() { return spreadsheet.n_rows(); }
+n_rows() {
+    write_log(std::format("n_rows: {}", spreadsheet.n_rows()));
+    return spreadsheet.n_rows();
+}
 
 LPSAFEARRAY WINAPI
 get( LPVARIANT key ) {
     try {
+        write_log("Sending data...");
+
         using DT = bidr::DataType;
 
         const auto s_key { bidr::bstr_string_convert(*key) };
@@ -433,6 +438,7 @@ contains( LPVARIANT key ) {
     try {
         const auto s_key { bidr::bstr_string_convert(*key) };
         const auto exists { spreadsheet.contains(s_key) };
+        write_log(std::format("Checking if contains {}: {}", s_key, spreadsheet.contains(s_key)));
         return exists ? TRUE : FALSE;
     }
     catch ( const std::exception& err ) {
@@ -446,7 +452,9 @@ type( LPVARIANT key ) {
     using DT = bidr::DataType;
     try {
         const auto s_key{ bidr::bstr_string_convert(*key) };
+        write_log(std::format("Checking type: {}", s_key));
         const auto type{ spreadsheet.type(s_key) };
+        write_log(std::format("\t-type: {}", bidr::type_string.at(type)));
         return static_cast<integer>(type);
     }
     catch ( const std::exception& err ) {

@@ -1198,13 +1198,14 @@ namespace burn_in_data_report
 
             bool flag { true };
 
+            // Add to type_map_
+            type_map_[_key] = dtype;
+
             // Load unfiltered data, then:
             // Apply filters & reductions
             switch ( dtype ) {
             case DataType::INTEGER: {
-                if ( !update_n_rows() ) {
-                    throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
-                }
+                
                 int_data_[_key] = file_.get_i(_key);
                 i_errors_[_key] = {};
                 apply_reduction(_key,
@@ -1212,12 +1213,12 @@ namespace burn_in_data_report
                                 average_type_,
                                 n_group_,
                                 n_points_);
-                break;
-            }
-            case DataType::DOUBLE: {
                 if ( !update_n_rows() ) {
                     throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
                 }
+                break;
+            }
+            case DataType::DOUBLE: {
                 double_data_[_key] = file_.get_d(_key);
                 d_errors_[_key] = {};
                 apply_reduction(_key,
@@ -1225,12 +1226,12 @@ namespace burn_in_data_report
                                 average_type_,
                                 n_group_,
                                 n_points_);
-                break;
-            }
-            case DataType::STRING: {
                 if ( !update_n_rows() ) {
                     throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
                 }
+                break;
+            }
+            case DataType::STRING: {
                 string_data_[_key] = file_.get_s(_key);
                 s_errors_[_key] = {};
                 apply_reduction(_key,
@@ -1238,14 +1239,14 @@ namespace burn_in_data_report
                                 average_type_,
                                 n_group_,
                                 n_points_);
+                if ( !update_n_rows() ) {
+                    throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
+                }
                 break;
             }
             case DataType::NONE:
                 break;
             }
-
-            // Add to type_map_
-            type_map_[_key] = dtype;
 
             return true;
         }
@@ -1661,7 +1662,7 @@ namespace burn_in_data_report
              *     which is caught, logging an error &
              *     returning DataType::NONE.
              */
-            return type_map_.at(key);
+            return file_.get_type(key);
         }
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::type>" );
