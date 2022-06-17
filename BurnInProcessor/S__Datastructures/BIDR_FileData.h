@@ -287,17 +287,17 @@ namespace burn_in_data_report
             recalculate_files();
 #ifdef DEBUG
             print("- File processed, " + std::to_string(t.elapsed()) + "s.", 1);
-            auto keys = get_keys(get_col_types());
+            const auto keys = get_keys(get_col_types());
             print_vec(keys);
 #endif
         }
 
-        file_data( std::vector<std::filesystem::directory_entry> files,
-                   const std::filesystem::directory_entry& config_loc =
-                       std::filesystem::directory_entry { "" },
-                   const uinteger& header_max_lim = 256,
-                   const nano& max_off_time = 5min,
-                   const bool& trimming = true ) :
+        explicit file_data( std::vector<std::filesystem::directory_entry> files,
+                            const std::filesystem::directory_entry& config_loc =
+                                std::filesystem::directory_entry { "" },
+                            const uinteger& header_max_lim = 256,
+                            const nano& max_off_time = 5min,
+                            const bool& trimming = true ) :
             memory_handle {},
             file_settings { std::string(""), header_max_lim },
             file_stats(),
@@ -325,13 +325,13 @@ namespace burn_in_data_report
             do_trimming_ { trimming } {
             // Initialize vectors for async file processing
 #ifdef DEBUG
-            Timer t;
+            const Timer t;
 #endif
-            recalculate_files();
+            if ( !recalculate_files() ) {
+                throw std::runtime_error("Failed to process files.");
+            }
 #ifdef DEBUG
-            print("- File processed, " + std::to_string(t.elapsed()) + "s.", 1);
-            auto keys = get_keys(get_col_types());
-            print_vec(keys);
+            write_log(std::format("- File processed, {}s.", t.elapsed()));
 #endif
         }
 
@@ -938,7 +938,6 @@ namespace burn_in_data_report
         if ( !async_column_title_scan() ) { return false; }
 #ifdef DEBUG
         print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-
         // Parse lines using file specific function, e.g. ParseStarlab, ParseCSV
         // Set parameters like delimiter, timestamps, sample period, etc...
         print("- Parsing data...", 2);
@@ -996,12 +995,14 @@ namespace burn_in_data_report
     inline DataType
     file_data::get_type( const std::string& title ) const noexcept {
         try {
+            if ( title == std::string{ "Combined Time" } ) {
+                return DataType::DOUBLE;
+            }
             for ( const auto& [key, type] : get_col_types() ) {
                 if ( title == key )
                     return type;
             }
-            std::out_of_range err("Key " + title + " does not exist.");
-            throw err;
+            throw std::out_of_range("Key " + title + " does not exist.");
         }
         catch ( const std::exception& err ) {
             write_err_log(err, "DLL: <file_data::get_type>");
@@ -1039,7 +1040,7 @@ namespace burn_in_data_report
         try {
             for ( auto& [name, config] : _configs ) {
 #ifdef DEBUG
-                //write_log(std::format("Checking: {}", name));
+                write_log(std::format("\t- Checking: {}", name));
 #endif
                 std::string pattern_string;
                 try { pattern_string = config.at("file_identifier").get<std::string>(); }
@@ -1052,6 +1053,7 @@ namespace burn_in_data_report
 #ifdef DEBUG
                     print("Success.", 4);
 #endif
+                    write_log(std::format("Config matched: {}", name));
                     _result = config;
                     return true;
                 }
@@ -1356,15 +1358,19 @@ namespace burn_in_data_report
     column_title_scan( const std::vector<std::string_view>& lines,
                        file_settings& settings ) noexcept {
         try {
-            std::vector<std::string> cols = settings.get_config().at("titles");
-            auto col_types =
+            const std::vector<std::string> cols = settings.get_config().at("titles");
+            const auto col_types =
                 settings.get_config().at("types").get<std::vector<DataType>>();
+
             if ( cols.size() != col_types.size() ) {
                 throw
                     std::runtime_error("Length mismatch between \"titles\" and \"types\" parameters in configuration file.");
             }
             // Add [title, type] pairs to type map in Settings object
-            for ( uinteger i = 0; i < cols.size(); ++i ) { settings.col_types()[cols[i]] = col_types[i]; }
+            for ( uinteger i = 0; i < cols.size(); ++i ) {
+                settings.col_types()[cols[i]] = col_types[i];
+                settings.col_order()[cols[i]] = i;
+            }
             settings.set_n_cols(cols.size());
 
             return true;
@@ -1388,8 +1394,11 @@ namespace burn_in_data_report
             }
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
-                if ( success_[i] )
+                if ( success_[i] ) {
                     success_[i] = futures[i].get();
+                    for ( const auto& [title, type] : settings_[i].col_types() ) {
+                    }
+                }
             }
 
             if ( !check_valid_state(success_) )
@@ -1447,21 +1456,21 @@ namespace burn_in_data_report
 #endif
             // Iterate through data lines
             for ( uinteger i { settings.get_header_lim() }; i < lines.size(); ++i ) {
-                const auto values = split_str(lines[i], delim);
+                const std::vector<std::string_view> values = split_str(lines[i], delim);
 
-                auto ct_it = col_types.begin();
-                auto val_it = values.begin();
-                while ( ct_it != col_types.end() && val_it != values.end() ) {
-                    const auto& [col_title, col_type] = *ct_it;
+                for ( const auto& [col_title, idx] : settings.col_order() ) {
+                    const auto col_type{ settings.get_type(col_title) };
+                    const std::string_view val{ values[idx]};
+
                     char buf[MAX_LINE_LENGTH];
                     // sscanf, which is used to parse values in further on, automatically
                     // trims whitespace at start & finish.
                     if ( col_type != DataType::STRING ) {
                         memcpy_s(buf, MAX_LINE_LENGTH,
-                                 val_it->data(), val_it->size());
+                                 val.data(), val.size());
 
-                        if ( val_it->size() < MAX_LINE_LENGTH )
-                            buf[val_it->size()] = '\0';
+                        if ( val.size() < MAX_LINE_LENGTH )
+                            buf[val.size()] = '\0';
                         else
                             buf[MAX_LINE_LENGTH - 1] = '\0';
                     }
@@ -1484,18 +1493,15 @@ namespace burn_in_data_report
                         break;
                     }
                     case DataType::STRING:
-                        strings[col_title].emplace_back(trim(*val_it));
+                        strings[col_title].emplace_back(trim(val));
                         break;
                     case DataType::NONE:
                         strings[col_title].emplace_back("");
                     }
 
                     // TODO: Add some error handling
-                    if ( sscanf_return_val == EOF ||
-                         sscanf_return_val == EINVAL ) {}
-
-                    ++ct_it;
-                    ++val_it;
+                    /*if ( sscanf_return_val == EOF ||
+                         sscanf_return_val == EINVAL ) {}*/
                 }
             }
 
@@ -1759,7 +1765,11 @@ namespace burn_in_data_report
                                    std::ref(strings_lens_[i]), std::ref(statistics_[i]));
                 }
             }
-            for ( uinteger i = 0; i < files_.size(); ++i ) { if ( success_[i] ) { success_[i] = futures[i].get(); } }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( success_[i] ) {
+                    success_[i] = futures[i].get();
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -2361,6 +2371,9 @@ namespace burn_in_data_report
                     current_time += interval;
                 }
             }
+            auto& cols{ col_types() };
+            cols["Combined Time"] = DataType::DOUBLE;
+            doubles_["Combined Time"] = get_internal_time_double();
             assert(pos == n_rows);
 
             /*
@@ -2428,6 +2441,10 @@ namespace burn_in_data_report
             * It IS guaranteed that all titles will be unique.
             */
             for ( const auto& [title, type] : this->col_types() ) {
+                if ( title == "Combined Time" ) {
+                    continue;
+                }
+
                 for ( uinteger j = 0; j < files_.size(); ++j ) {
                     switch ( type ) {
                     case DataType::INTEGER:
@@ -2449,7 +2466,7 @@ namespace burn_in_data_report
                 }
             }
 
-            this->set_n_cols(this->col_types().size());
+            set_n_cols(col_types().size());
 #ifdef DEBUG
             print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
 #endif

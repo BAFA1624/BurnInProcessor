@@ -1298,10 +1298,20 @@ namespace burn_in_data_report
     array_convert( const std::vector<From>& data,
                    const std::function<To(const From&)>& conversion_op,
                    const bool& copy=true) {
-        CComSafeArray<To> sa_result( data.size() );
+        // Create a column-wise SAFEARRAY
+        SAFEARRAYBOUND bounds[2];
+        bounds[1].cElements = 1;
+        bounds[1].lLbound = 0;
+        bounds[0].cElements = data.size();
+        bounds[0].lLbound = 0;
+        CComSafeArray<To> sa_result( bounds, 2 );
+
+        LONG indexes[2];
+        indexes[1] = 0;
 
         for ( const auto& [i, x] : enumerate(data) ) {
-            sa_result.SetAt( i, conversion_op(x), copy );
+            indexes[0] = i;
+            sa_result.MultiDimSetAt( indexes, conversion_op(x) );
         }
 
         return sa_result.Detach();
@@ -1316,6 +1326,36 @@ namespace burn_in_data_report
         }
 
         return bsa;
+    }
+
+    inline bool
+    copy_file( const std::filesystem::path& source_path,
+               const std::filesystem::path& destination_path ) {
+        const auto source_dir = std::filesystem::directory_entry{ source_path };
+        const auto destination_dir = std::filesystem::directory_entry{ destination_path };
+
+        // Check source exists
+        if ( source_dir.exists() ) {
+            using openmode = std::ios_base;
+
+            std::ifstream source{ source_path, openmode::binary | openmode::in };
+            std::ofstream destination{ destination_path, openmode::binary | openmode::trunc };
+
+            if ( source.is_open() && destination.is_open() ) {
+                destination << source.rdbuf();
+
+                source.close();
+                destination.close();
+
+                return true;
+            }
+            else {
+                throw std::runtime_error("<copy_file> Failed to open file.");
+            }
+        }
+        else {
+            return false;
+        }
     }
 
 } // namespace burn_in_data_report

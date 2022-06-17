@@ -35,14 +35,15 @@ namespace burn_in_data_report
     }
 
     inline std::vector<std::string_view>
-    split_str( std::string_view _sv, std::string_view _delims ) {
+    split_str( const std::string_view _sv, const std::string_view _delims ) {
         /*
-        * Declare & per-reserve result storage
+        * Declare & pre-reserve result storage
         * Reserving _sv.size() / 3 for space
         * efficiency. Reallocation will only
         * occur if there are less than 3 chars
         * on avg per value in the data.
         */
+
         std::vector<std::string_view> substrings;
         substrings.reserve(_sv.size() / 3);
 
@@ -79,10 +80,10 @@ namespace burn_in_data_report
         return substrings;
     }
 
-    inline std::vector<std::string>
+    inline std::vector<std::string_view>
     split_str( std::string_view _sv, const std::string& delims ) {
-        std::string_view         _delims { delims };
-        std::vector<std::string> res;
+        const std::string_view         _delims { delims };
+        std::vector<std::string_view> res;
         res.reserve(_sv.length() / 2);
 
         const char* ptr { _sv.data() };

@@ -19,6 +19,12 @@ namespace burn_in_data_report
         measurement_period_;                        // Time period between each measurement (nanoseconds)
         TypeMap
         col_types_;                                 // Represents the expected data type of each column
+        std::map<std::string, uinteger>
+        col_order_;                                 // Represents the order of the columns because if enough
+                                                    // elements are added to col_types_, it will need to increase it's
+                                                    // capacity. To do this is expands the allocated storage,
+                                                    // rehashes (scrambles) the contents, then adds the new element.
+
         uinteger n_cols_;                           // Number of columns
         uinteger n_rows_;                           // Number of rows
         uinteger data_pos_;                         // Row data begins
@@ -45,6 +51,8 @@ namespace burn_in_data_report
         void set_data_pos( const uinteger& data_pos ) noexcept { data_pos_ = data_pos; }
 
         void set_col_types( const TypeMap& col_types ) noexcept { col_types_ = col_types; }
+        
+        void set_col_order( const std::map<std::string, uinteger>& order ) noexcept { col_order_ = order; }
 
         void set_n_cols( const uinteger& n_cols ) noexcept { n_cols_ = n_cols; }
 
@@ -56,9 +64,6 @@ namespace burn_in_data_report
 
         void set_headermaxlim( const uinteger& header_max_lim ) noexcept { header_max_lim_ = header_max_lim; }
 
-        // Public access to vectors
-        TypeMap& col_types() noexcept { return col_types_; }
-
         file_settings( const std::string& filename, const uinteger& header_max_lim ) :
             filename_(filename),
             format_(FileFormat("", "{}")),
@@ -66,6 +71,7 @@ namespace burn_in_data_report
             start_time_(std::chrono::sys_time<nano> {}),
             measurement_period_(nano::zero()),
             col_types_({}),
+            col_order_({}),
             n_cols_(0),
             n_rows_(0),
             data_pos_(0),
@@ -97,6 +103,8 @@ namespace burn_in_data_report
 
         const TypeMap get_col_types() const noexcept { return col_types_; }
 
+        const std::map<std::string, uinteger> get_col_order() const noexcept { return col_order_; }
+
         const uinteger get_n_cols() const noexcept { return n_cols_; }
 
         const uinteger get_n_rows() const noexcept { return n_rows_; }
@@ -122,7 +130,9 @@ namespace burn_in_data_report
 
         uinteger& get_data_pos() noexcept { return data_pos_; }
 
-        TypeMap& get_col_types() noexcept { return col_types_; }
+        TypeMap& col_types() noexcept { return col_types_; }
+
+        std::map<std::string, uinteger>& col_order() noexcept { return col_order_; }
 
         uinteger& get_n_cols() noexcept { return n_cols_; }
 

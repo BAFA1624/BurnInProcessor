@@ -237,7 +237,9 @@ namespace burn_in_data_report
             }
             else { write_log("Initialization failed."); }
         }
-        catch ( const std::exception& err ) { write_err_log(err, "DLL: <spreadsheet::spreadsheet>"); }
+        catch ( const std::exception& err ) {
+            throw std::runtime_error(err.what());
+        }
     }
 
     // COMPLETE?
@@ -518,8 +520,7 @@ namespace burn_in_data_report
 
             // Average by each cycle, this will likely always be true
             // Still may be useful to have the option to not use it
-            if ( !filters_copy.empty() ) {
-
+            if ( !filters_copy.empty() || no_rows > MAX_ROWS ) {
                 // Need to think of acceptable way to do strings
                 // For now will use lambda which returns NaN values
                 // As it doesn't make much sense to "take the average
@@ -1179,9 +1180,9 @@ namespace burn_in_data_report
             // Check column exists & not already loaded
             for ( const auto& [key, type] : file_.get_col_types() ) {
                 if ( key == _key ) {
-                    if ( type_map_.contains(key) ) {
+                    if ( type_map_.contains(key) /*|| _key == std::string{"Combined Time"}*/ ) {
                         // Column is already loaded, exit
-                        write_log(std::format("<spreadsheet::load_column> Column already exists ({})", _key));
+                        write_log(std::format("<spreadsheet::load_column> Column already loaded ({}).", _key));
                         return true;
                     }
                     write_log(std::format("<spreadsheet::load_column> Loading {}", _key));
@@ -1205,7 +1206,6 @@ namespace burn_in_data_report
             // Apply filters & reductions
             switch ( dtype ) {
             case DataType::INTEGER: {
-                
                 int_data_[_key] = file_.get_i(_key);
                 i_errors_[_key] = {};
                 apply_reduction(_key,
@@ -1348,24 +1348,21 @@ namespace burn_in_data_report
     // COMPLETE?
     inline bool
     spreadsheet::filter( const std::string& _key,
-                         const double& _cutoff,
+                         const double& _cutoff = 0.8,
                          const uinteger& _n = 2,
                          const uinteger& _max_range_sz = 0 ) noexcept {
         try {
             // Check valid cutoff fraction & that _key exists / has been loaded
-            assert(
-                   0 <= _cutoff &&
-                   _cutoff < 1 &&
-                   type_map_.find( _key ) != type_map_.end()
-                  );
-            // Can only filter based on int data or double data
-            assert(
-                   type_map_.at( _key ) != DataType::STRING
-                   && type_map_.at( _key ) != DataType::NONE
-                  );
+            if ( !(0 <= _cutoff && _cutoff < 1 && type_map_.contains( _key ) ) ) {
+                throw std::runtime_error("Invalid filter parameters received.");
+            }
+            if ( type_map_.at( _key ) == DataType::STRING ||
+                 type_map_.at( _key ) == DataType::NONE ) {
+                throw std::runtime_error("Selected column type is unsupported.");
+            }
 
             // get DataType of provided _key
-            DataType dtype = type_map_.at(_key);
+            const DataType dtype = type_map_.at(_key);
 
             // Clear existing filters
             filters_.clear();
@@ -1389,14 +1386,20 @@ namespace burn_in_data_report
                     int_cutoff[key] = static_cast<integer>(
                         _cutoff * static_cast<double>(
                             check_MAX(int_data_.at(key)) ) );
+                    if ( key == _key ) {
+                        write_log(std::format("\t- {} Cutoff: {}", _key, int_cutoff[key]));
+                    }
                     break;
                 case DataType::DOUBLE:
                     double_cutoff[key] = _cutoff * check_MAX(double_data_.at(key));
+                    if ( key == _key ) {
+                        write_log(std::format("\t- {} Cutoff: {}", _key, double_cutoff[key]));
+                    }
                     break;
                 case DataType::STRING:
                     break;
                 case DataType::NONE:
-                    break;
+                    throw std::runtime_error("Invalid DataType received.");
                 }
             }
 
@@ -1510,6 +1513,7 @@ namespace burn_in_data_report
                 return results;
             };
 
+            write_log("Extracting ranges...");
             // Calculate filters
             switch ( dtype ) {
             case DataType::INTEGER:
@@ -1522,14 +1526,15 @@ namespace burn_in_data_report
                                          double_cutoff.at(_key),
                                          _n, _max_range_sz);
                 break;
-            case DataType::STRING:
-                filters_ = {};
-                break;
-            case DataType::NONE:
-                write_err_log(std::runtime_error("DLL: <spreadsheet::filter>"));
-                filters_ = {};
-                break;
+            default:
+                throw std::runtime_error("Invalid filter type received.");
             }
+            const uinteger sz =
+            std::accumulate( filters_.cbegin(), filters_.cend(),
+                             static_cast<uinteger>(0),
+                             [](const uinteger x, const std::pair<uinteger, uinteger>& p)
+                             { return x + (p.second - p.first); } );
+            write_log(std::format("Done. Filter size: {} ranges, {} elements.", filters_.size(), sz) );
 
             /*
              * No need to update n_rows_.
@@ -1543,7 +1548,7 @@ namespace burn_in_data_report
             return true;
         }
         catch ( const std::exception& err ) {
-            write_err_log(err, "DLL: <file_data::filter_data>");
+            write_err_log(err, "DLL: <file_data::filter>");
             return false;
         }
     }
@@ -1585,7 +1590,25 @@ namespace burn_in_data_report
     inline [[nodiscard]] std::vector<integer>
     spreadsheet::get_i( const std::string& key ) const noexcept {
         try {
-            return int_data_.at(key);
+            if ( filters_.empty() ) {
+                return int_data_.at(key);
+            }
+            const uinteger sz =
+            std::accumulate(filters_.cbegin(), filters_.end(),
+                            static_cast<uinteger>(0),
+                            [](uinteger sum, const std::pair<uinteger, uinteger>& p)
+                            { return sum + (p.second - p.first); });
+
+            std::vector<integer> data;
+            data.reserve(sz);
+
+            for ( const auto& [first, last] : filters_ ) {
+                data.insert(data.cend(),
+                            int_data_.at(key).cbegin() + first,
+                            int_data_.at(key).cbegin() + last);
+            }
+
+            return data;
         }
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::get_i>" );
@@ -1596,7 +1619,26 @@ namespace burn_in_data_report
     inline [[nodiscard]] std::vector<double>
     spreadsheet::get_d( const std::string& key ) const noexcept {
         try {
-            return double_data_.at(key);
+            if ( filters_.empty() ) {
+                return double_data_.at(key);
+                
+            }
+            const uinteger sz =
+            std::accumulate(filters_.cbegin(), filters_.end(),
+                            static_cast<uinteger>(0),
+                            [](uinteger sum, const std::pair<uinteger, uinteger>& p)
+                            { return sum + (p.second - p.first); });
+
+            std::vector<double> data;
+            data.reserve(sz);
+
+            for ( const auto& [first, last] : filters_ ) {
+                data.insert(data.cend(),
+                            double_data_.at(key).cbegin() + first,
+                            double_data_.at(key).cbegin() + last);
+            }
+
+            return data;
         }
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::get_d>" );
@@ -1607,7 +1649,26 @@ namespace burn_in_data_report
     inline [[nodiscard]] std::vector<std::string>
     spreadsheet::get_s( const std::string& key ) const noexcept {
         try {
-            return string_data_.at(key);
+            if ( filters_.empty() ) {
+                return string_data_.at(key);
+                
+            }
+            const uinteger sz =
+            std::accumulate(filters_.cbegin(), filters_.end(),
+                            static_cast<uinteger>(0),
+                            [](uinteger sum, const std::pair<uinteger, uinteger>& p)
+                            { return sum + (p.second - p.first); });
+
+            std::vector<std::string> data;
+            data.reserve(sz);
+
+            for ( const auto& [first, last] : filters_ ) {
+                data.insert(data.cend(),
+                            string_data_.at(key).cbegin() + first,
+                            string_data_.at(key).cbegin() + last);
+            }
+
+            return data;
         }
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::get_s>" );
@@ -1618,21 +1679,75 @@ namespace burn_in_data_report
     inline [[nodiscard]] std::vector<double>
     spreadsheet::get_error( const std::string& key ) const noexcept {
         try {
+            std::vector<double> errors;
+
             switch ( type_map_.at(key) ) {
             case DataType::INTEGER: {
-                return i_errors_.at(key);
+                if ( filters_.empty() ) {
+                    errors = i_errors_.at(key);
+                }
+                else {
+                    const uinteger sz =
+                    std::accumulate(filters_.cbegin(), filters_.cend(),
+                                    static_cast<uinteger>(0),
+                                    [](const uinteger size, const std::pair<uinteger, uinteger>& p)
+                                    { return size + (p.second - p.first); });
+
+                    errors.reserve(sz);
+
+                    for ( const auto& [first, last] : filters_ ) {
+                        errors.insert(errors.cend(),
+                                      i_errors_.at(key).cbegin() + first,
+                                      i_errors_.at(key).cbegin() + last);
+                    }
+                }
             } break;
             case DataType::DOUBLE: {
-                return d_errors_.at(key);
+                if ( filters_.empty() ) {
+                    errors = d_errors_.at(key);
+                }
+                else {
+                    const uinteger sz =
+                    std::accumulate(filters_.cbegin(), filters_.cend(),
+                                    static_cast<uinteger>(0),
+                                    [](const uinteger size, const std::pair<uinteger, uinteger>& p)
+                                    { return size + (p.second - p.first); });
+
+                    errors.reserve(sz);
+
+                    for ( const auto& [first, last] : filters_ ) {
+                        errors.insert(errors.cend(),
+                                      d_errors_.at(key).cbegin() + first,
+                                      d_errors_.at(key).cbegin() + last);
+                    }
+                }
             } break;
             case DataType::STRING: {
-                return s_errors_.at(key);
+                if ( filters_.empty() ) {
+                    errors = s_errors_.at(key);
+                }
+                else {
+                    const uinteger sz =
+                    std::accumulate(filters_.cbegin(), filters_.cend(),
+                                    static_cast<uinteger>(0),
+                                    [](const uinteger size, const std::pair<uinteger, uinteger>& p)
+                                    { return size + (p.second - p.first); });
+
+                    errors.reserve(sz);
+
+                    for ( const auto& [first, last] : filters_ ) {
+                        errors.insert(errors.cend(),
+                                      s_errors_.at(key).cbegin() + first,
+                                      s_errors_.at(key).cbegin() + last);
+                    }
+                }
             } break;
             case DataType::NONE: {
-                return {};
+                errors = {};
             }
             }
-            return {};
+
+            return errors;
         }
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::get_error>" );

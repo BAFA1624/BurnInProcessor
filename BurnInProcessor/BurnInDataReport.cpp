@@ -55,6 +55,7 @@ clear_spreadsheet() {
                                 ? TRUE
                                 : FALSE;
         if ( !result ) { throw std::runtime_error("Failed to clear spreadsheet."); }
+        bidr::copy_file(log_path, log_location + "\\BurnInErrLog.txt");
         clear_log();
         return result;
     }
@@ -313,10 +314,9 @@ filter( LPVARIANT v_col_title,
     try {
         write_log("Filtering data...");
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
-        write_log(std::format("{}", col_title));
-        return spreadsheet.filter(col_title, cutoff, n_skip, max_range_sz)
-                   ? TRUE
-                   : FALSE;
+        const bool result = spreadsheet.filter(col_title, cutoff, n_skip, max_range_sz);
+        write_log(std::format("Filter result: {}", result ? "Success." : "Failed."));
+        return result ? TRUE : FALSE;
     }
     catch ( const std::exception& err ) {
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
