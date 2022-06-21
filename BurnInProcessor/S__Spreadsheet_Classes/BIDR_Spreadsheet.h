@@ -520,7 +520,9 @@ namespace burn_in_data_report
 
             // Average by each cycle, this will likely always be true
             // Still may be useful to have the option to not use it
-            if ( !filters_copy.empty() || no_rows > MAX_ROWS ) {
+            if ( _r_type == reduction_type::DEFAULT
+                 || _r_type == reduction_type::all
+                 || no_rows > MAX_ROWS ) {
                 // Need to think of acceptable way to do strings
                 // For now will use lambda which returns NaN values
                 // As it doesn't make much sense to "take the average
@@ -733,9 +735,11 @@ namespace burn_in_data_report
                   || _r_type == reduction_type::all)
                  && _n_group > 0
                  && _n_group < file_.get_n_rows() ) {
-                write_log("Averaging by group...");
+                if ( _n_group == 1 ) {
+                    goto NPOINTS;
+                }
 
-                // Tmp storage to pass to AVG function
+                write_log("Averaging by group...");
 
                 // Lambda function to handle averaging
                 auto avg
@@ -923,6 +927,7 @@ namespace burn_in_data_report
                 write_log("Done.");
             }
 
+        NPOINTS:
             // Average if no_rows > _max_points (user specified) OR no_rows > MAX_ROWS (excel specified)
             // (Is this test type selected? and parameter n_points_ is valid?
             // OR is n_points_ > MAX_ROWS OR is _no_rows (pre-averaging) > MAX_ROWS
@@ -988,7 +993,7 @@ namespace burn_in_data_report
                                                       );
                     }
 
-                    // Handle last n(overflow) points adding 1 extra per point so total = n_points_
+                    // Handle last n(overflow) points adding 1 extra per point so total = n_points_ + 1
                     for ( uinteger i { n_points - overflow }; i < n_points; ++i ) {
                         tmp.emplace_back(static_cast<R>(
                                              mean(data,
@@ -1374,13 +1379,18 @@ namespace burn_in_data_report
             // Calculate cutoff values as fraction of max datapoint
             auto check_MAX =
                 []<ArithmeticType T>( const std::vector<T>& data ) -> T {
-                assert(!data.empty());
-                T max { data[0] };
-                for ( auto iter { data.begin() + 1 }; ++iter != data.end(); )
-                    max = MAX(max, *iter);
-                return max;
+                    assert(!data.empty());
+                    T max { data[0] };
+                    write_log(std::format("data.size(): {}", data.size()));
+                    size_t i{ 0 };
+                    for ( auto iter { data.begin() }; iter != data.end(); ++iter, ++i) {
+                        write_log(std::format("{}", i));
+                        max = MAX(max, *iter);
+                    }
+                    return max;
             };
             for ( const auto& [key, type] : type_map_ ) {
+                write_log(std::format("{}: {}", key, type_string.at(type)));
                 switch ( type ) {
                 case DataType::INTEGER:
                     int_cutoff[key] = static_cast<integer>(
@@ -1391,6 +1401,7 @@ namespace burn_in_data_report
                     }
                     break;
                 case DataType::DOUBLE:
+                    write_log(std::format("size of data({}): {}", key, double_data_.at(key).size()));
                     double_cutoff[key] = _cutoff * check_MAX(double_data_.at(key));
                     if ( key == _key ) {
                         write_log(std::format("\t- {} Cutoff: {}", _key, double_cutoff[key]));
