@@ -115,10 +115,9 @@ namespace burn_in_data_report
         void get( char* _dest, const char* _src, const uinteger& _n ) const {
             if ( _data && (_src + _n) >= _data && (_src + _n) <= (_data + _sz) ) { memcpy_checked(_dest, _src, _n); }
             else {
-                std::out_of_range
-                    err("memory_handle::get(char* _dest, const char* _src, const uint64_t& _n): Index out of range. _n = "
+                throw std::out_of_range
+                    ("memory_handle::get(char* _dest, const char* _src, const uint64_t& _n): Index out of range. _n = "
                         + std::to_string(_n));
-                throw err;
             }
         }
 

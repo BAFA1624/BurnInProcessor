@@ -47,22 +47,22 @@ using uinteger = uint32_t;
 constexpr size_t double_bits = sizeof(double) * CHAR_BIT;
 static_assert( double_bits == 64 );
 static_assert( std::is_signed_v<time_t> );
-const std::filesystem::path log_path {
-    R"(C:\\Users\AndrewsBe\Documents\BurnInProcessor\Debug\BurnInLog.txt)"
-};
-const std::filesystem::path err_log_path = log_path;
 
-const std::string log_location {
-    R"(C:\\Users\AndrewsBe\Documents\BurnInProcessor\Debug\)"
+#ifdef DEBUG
+inline std::string log_location {
+    R"(C:\Users\AndrewsBe\Documents\BurnInProcessor\Debug\)"
+};
+#else
+inline std::string log_location {
+    R"(C:\Users\AndrewsBe\Documents\BurnInProcessor\Release\)"
+};
+#endif
+
+inline std::filesystem::path log_path {
+    log_location + "BurnInLog.txt"
 };
 
-const std::wstring w_log_path {
-    LR"(C:\\Users\AndrewsBe\Documents\BurnInProcessor\Debug\BurnInLog.txt)"
-};
-
-const std::wstring w_log_location {
-    LR"(C:\\Users\AndrewsBe\Documents\BurnInProcessor\Debug\)"
-};
+inline std::filesystem::path err_log_path { log_location };
 
 inline void WINAPI
 clear_err_log() {
@@ -95,7 +95,7 @@ write_log( const std::string_view str ) {
 }
 inline void WINAPI
 write_log( const std::wstring_view w_str ) {
-    std::wfstream w_log_file( w_log_path,
+    std::wfstream w_log_file( log_path,
                              std::ios_base::out | std::ios_base::app );
     w_log_file << w_str << L"\n";
     w_log_file.close();
@@ -1336,24 +1336,13 @@ namespace burn_in_data_report
 
         // Check source exists
         if ( source_dir.exists() ) {
-            using openmode = std::ios_base;
-
-            std::ifstream source{ source_path, openmode::binary | openmode::in };
-            std::ofstream destination{ destination_path, openmode::binary | openmode::trunc };
-
-            if ( source.is_open() && destination.is_open() ) {
-                destination << source.rdbuf();
-
-                source.close();
-                destination.close();
-
-                return true;
-            }
-            else {
-                throw std::runtime_error("<copy_file> Failed to open file.");
-            }
+            using copy_options=std::filesystem::copy_options;
+            return std::filesystem::copy_file(source_path,
+                                              destination_path,
+                                              copy_options::overwrite_existing);
         }
         else {
+            write_err_log(std::runtime_error("<copy_file> Source file does not exist."));
             return false;
         }
     }

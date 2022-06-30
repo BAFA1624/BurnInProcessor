@@ -54,8 +54,9 @@ clear_spreadsheet() {
         const BOOL result = (spreadsheet.clear_spreadsheet())
                                 ? TRUE
                                 : FALSE;
+        const std::string err_log{ log_location + "BurnInErrLog.txt" };
+        bidr::copy_file(log_path, err_log);
         if ( !result ) { throw std::runtime_error("Failed to clear spreadsheet."); }
-        bidr::copy_file(log_path, log_location + "\\BurnInErrLog.txt");
         clear_log();
         return result;
     }
@@ -70,8 +71,10 @@ init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
                   _In_ LPVARIANT raw_config_loc_name,
                   _In_ const uinteger& max_header_sz,
                   _In_ const double& max_off_time_minutes,
-                  _In_ const BOOL& do_trimming ) {
+                  _In_ const BOOL& do_trimming,
+                  _In_ LPVARIANT log_file_path ) {
     try {
+        log_location = bidr::bstr_string_convert(_bstr_t(log_file_path));
         BOOL result = clear_spreadsheet();
         write_log("Initializing spreadsheet...");
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
@@ -312,7 +315,6 @@ filter( LPVARIANT v_col_title,
         const uinteger& n_skip,
         const uinteger& max_range_sz ) {
     try {
-        write_log("Filtering data...");
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
         const bool result = spreadsheet.filter(col_title, cutoff, n_skip, max_range_sz);
         write_log(std::format("Filter result: {}", result ? "Success." : "Failed."));
@@ -460,6 +462,17 @@ type( LPVARIANT key ) {
     catch ( const std::exception& err ) {
         write_err_log( err, "DLL: <type>" );
         return static_cast<integer>(DT::NONE);
+    }
+}
+
+BOOL WINAPI
+clear_changes() {
+    try {
+        return spreadsheet.clear_changes() ? TRUE : FALSE;
+    }
+    catch ( const std::exception& err ) {
+        write_err_log( err, "DLL: <clear_changes>" );
+        return FALSE;
     }
 }
 

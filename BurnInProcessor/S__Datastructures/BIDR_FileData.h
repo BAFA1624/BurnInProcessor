@@ -73,7 +73,7 @@ namespace burn_in_data_report
     static bool
     check_valid_state( const std::vector<bool>& bools ) {
         bool result = false;
-        for ( auto b : bools )
+        for ( const auto b : bools )
             if ( b )
                 return true;
 #ifdef DEBUG
@@ -280,16 +280,11 @@ namespace burn_in_data_report
             internal_time_(),
             file_boundaries_(),
             do_trimming_ { trimming } {
-#ifdef DEBUG
-            print("Constructing file_data:", 1);
-            Timer t;
-#endif
-            recalculate_files();
-#ifdef DEBUG
-            print("- File processed, " + std::to_string(t.elapsed()) + "s.", 1);
-            const auto keys = get_keys(get_col_types());
-            print_vec(keys);
-#endif
+            const Timer t;
+            if ( !recalculate_files() ) {
+                throw std::runtime_error("Failed to process files.");
+            }
+            write_log(std::format("- File processed, {}s.", t.elapsed()));
         }
 
         explicit file_data( std::vector<std::filesystem::directory_entry> files,
@@ -324,15 +319,11 @@ namespace burn_in_data_report
             file_boundaries_(),
             do_trimming_ { trimming } {
             // Initialize vectors for async file processing
-#ifdef DEBUG
             const Timer t;
-#endif
             if ( !recalculate_files() ) {
                 throw std::runtime_error("Failed to process files.");
             }
-#ifdef DEBUG
             write_log(std::format("- File processed, {}s.", t.elapsed()));
-#endif
         }
 
         ~file_data() = default;
@@ -380,9 +371,13 @@ namespace burn_in_data_report
         }
 
         [[nodiscard]] std::vector<double> get_d( const std::string& _key ) const noexcept {
-            try { return doubles_.at(_key); }
+            try {
+                const auto& x = doubles_.at(_key);
+                write_log(std::format("<get_d> {}: {}", _key, x.size()));
+                return x;
+            }
             catch ( const std::exception& err ) {
-                write_err_log(err, std::format("DLL: <file_data::get_i> (key = {})", _key));
+                write_err_log(err, std::format("DLL: <file_data::get_d> (key = {})", _key));
                 return std::vector<double> {};
             }
         }
@@ -553,31 +548,26 @@ namespace burn_in_data_report
             adjust_size(strings_lens_, files_.size(), static_cast<uinteger>( 0 ));
             adjust_size(statistics_, files_.size(), file_stats {});
 
-#ifdef DEBUG
             Timer t;
-#endif
             if ( !this->async_get_files() ) { // Retrieve file
                 write_err_log(std::runtime_error(err_msg), "FATAL ERROR: Failed to retreive files.");
                 return false;
             }
-#ifdef DEBUG
-            print("- File retrieved, " + std::to_string(t.elapsed()) + "s.", 2);
+            write_log(std::format(" - Files retrieved in {} seconds.", t.elapsed()));
             t.reset();
-#endif
             if ( !this->async_encode_adjust_files() ) {
                 // Scan & adjust file encoding if necessary
                 write_err_log(std::runtime_error(err_msg), "FATAL ERROR: Failed to adjust file encoding.");
                 return false;
             }
-#ifdef DEBUG
-            print("- Encoding adjusted, " + std::to_string(t.elapsed()) + "s.", 2);
+            write_log(std::format(" - Encoding adjusted in {} seconds.", t.elapsed()));
             t.reset();
-#endif
             if ( !this->async_process_files() ) {
                 // Perform all file processing required
                 write_err_log(std::runtime_error(err_msg), "FATAL ERROR: Failed to process file.");
                 return false;
             }
+            write_log(std::format(" - File processed in {} seconds.", t.elapsed()));
 
             return true;
         }
@@ -651,7 +641,6 @@ namespace burn_in_data_report
     static memory_handle
     get_file( const std::filesystem::directory_entry& _file ) noexcept {
         try {
-            std::fstream stream;
             memory_handle handle;
 #ifdef DEBUG
             std::string s = _file.path().string();
@@ -661,14 +650,14 @@ namespace burn_in_data_report
 #ifdef DEBUG
                 print("Opening: " + name, 3);
 #endif
-                stream.open(_file.path(), std::ios::in | std::ios::binary);
+                std::fstream stream(_file.path(), std::ios::in | std::ios::binary);
                 if ( !stream.is_open() ) {
 #ifdef DEBUG
                     print("Failed to open " + name, 3);
 #endif
                     return memory_handle {};
                 }
-                uintmax_t true_file_size = _file.file_size();
+                const uintmax_t true_file_size = _file.file_size();
                 uinteger size =
                     (true_file_size > std::numeric_limits<uinteger>::max())
                         ? std::numeric_limits<uinteger>::max()
@@ -898,68 +887,24 @@ namespace burn_in_data_report
     // Also delimiters, etc.
     inline bool
     file_data::async_process_files() noexcept {
-#ifdef DEBUG
-        print("- Converting text --> lines...", 2);
         Timer t;
-#endif
         if ( !async_text_to_lines() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-#endif
-
         // Scan for file style, e.g Starlabs .txt or normal .csv style.
-        /*
-        IMPORTANT!!: When u sort passing of config file location from excel -->
-        application, need to add to constructor so it can be passed to ParseFileType
-        here!
-        */
-#ifdef DEBUG
-        print("- Parsing file type...", 2);
-        t.reset();
-#endif
         if ( !async_parse_file_type(config_loc_) ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        print("- Parsing end of header...", 2);
-        t.reset();
-#endif
         if ( !async_header_halt_scan() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        print("- Parsing timestamp...", 2);
-        t.reset();
-#endif
         if ( !async_time_stamp_scan() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        print("- Parsing column titles...", 2);
-        t.reset();
-#endif
         if ( !async_column_title_scan() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        // Parse lines using file specific function, e.g. ParseStarlab, ParseCSV
-        // Set parameters like delimiter, timestamps, sample period, etc...
-        print("- Parsing data...", 2);
+        write_log(std::format("   - Header info parsed in {} seconds.", t.elapsed()));
         t.reset();
-#endif
         if ( !async_parse_data() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        print("- Trimming data...", 2);
+        write_log(std::format("   - Data parsed in {} seconds.", t.elapsed()));
         t.reset();
-#endif
+        const Timer t2;
         if ( !async_trim_data() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-        print("- Combining parsed files...", 2);
-        t.reset();
-#endif
+        write_log(std::format("     - Data trimmed in {} seconds.", t.elapsed()));
         if ( !async_combine_data() ) { return false; }
-#ifdef DEBUG
-        print("Finished, " + std::to_string(t.elapsed()) + "s.", 2);
-#endif
-
+        write_log(std::format("     - Data combined in {} seconds.", t.elapsed()));
+        write_log(std::format("   - Post-processing completed in {} seconds.", t2.elapsed()));
         return true;
     }
 
@@ -1053,7 +998,7 @@ namespace burn_in_data_report
 #ifdef DEBUG
                     print("Success.", 4);
 #endif
-                    write_log(std::format("Config matched: {}", name));
+                    write_log(std::format("     - Config matched: {}", name));
                     _result = config;
                     return true;
                 }
@@ -1806,9 +1751,12 @@ namespace burn_in_data_report
         try {
             const auto& config = settings.get_config();
             const auto& filter_key = config.at("trim_filter_key").get<std::string>();
+            write_log(filter_key);
             const auto& type_map = settings.get_col_types();
             const auto& interval = settings.get_measurement_period();
+            write_log(std::to_string(interval.count()));
             const auto& data_type = type_map.at(filter_key);
+            write_log(type_string.at(data_type));
 
             assert(data_type != DataType::NONE);
 
@@ -1879,14 +1827,10 @@ namespace burn_in_data_report
 
             // Remove sections of invalid data from all columns & update length data
             if ( trim_ranges.empty() ) {
-#ifdef DEBUG
-                std::cout << "No data to trim." << std::endl;
-#endif
+                write_log("No data to trim.");
                 return true;
             }
-#ifdef DEBUG
-            std::cout << "Found data to trim! trim_ranges.size() = " << trim_ranges.size() << std::endl;
-#endif
+            write_log("Found data to trim.");
 
             const auto remove_data =
                 [&trim_ranges]<typename T>( TMap<T>& map, const std::string& key ) {

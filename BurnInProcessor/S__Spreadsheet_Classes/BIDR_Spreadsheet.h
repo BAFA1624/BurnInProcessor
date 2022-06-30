@@ -159,6 +159,9 @@ namespace burn_in_data_report
         [[nodiscard]] DataType
         type( const std::string& key ) const noexcept;
 
+        [[nodiscard]] bool
+        clear_changes() noexcept;
+
     };
 
 
@@ -334,75 +337,81 @@ namespace burn_in_data_report
 
     [[nodiscard]] inline bool
     spreadsheet::update_n_rows() {
-        bool result{ true };
-        uinteger size{ 0 };
-        write_log("update_n_rows:");
+        try {
+            bool result{ true };
+            uinteger size{ 0 };
+            write_log("update_n_rows:");
 
-        for ( const auto& [key, type] : type_map_ ) {
-            write_log(std::format("({}, {}):", key, type_string.at(type)));
-            switch ( type ) {
-            case DataType::INTEGER: {
-                if ( size == 0 ) {
-                    size = int_data_.at(key).size();
-                    write_log(std::format("\tsetting size = {}", size));
-                }
-                else {
-                    if ( size != int_data_.at(key).size() ) {
-                        write_log(std::format("\tsize = {}, data size = {}", size, int_data_.at(key).size()));
-                        write_err_log( std::runtime_error("\tDLL: <spreadsheet::update_n_rows> Data length mismatch."));
-                        result = false;
+            for ( const auto& [key, type] : type_map_ ) {
+                write_log(std::format("({}, {}):", key, type_string.at(type)));
+                switch ( type ) {
+                case DataType::INTEGER: {
+                    if ( size == 0 ) {
+                        size = int_data_.at(key).size();
+                        write_log(std::format("\tsetting size = {}", size));
                     }
                     else {
-                        write_log(std::format("\t{}", size));
+                        if ( size != int_data_.at(key).size() ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, int_data_.at(key).size()));
+                            write_err_log( std::runtime_error("\tDLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                            result = false;
+                        }
+                        else {
+                            write_log(std::format("\t{}", size));
+                        }
                     }
                 }
-            }
-                break;
-            case DataType::DOUBLE: {
-                if ( size == 0 ) {
-                    size = double_data_.at(key).size();
-                    write_log(std::format("\tsetting size = {}", size));
-                }
-                else {
-                    if ( size != double_data_.at(key).size() ) {
-                        write_log(std::format("\tsize = {}, data size = {}", size, double_data_.at(key).size()));
-                        write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
-                        result = false;
-                    }
-                    else {
-                        write_log(std::format("\t{}", size));
-                    }
-                }
-            }
-                break;
-            case DataType::STRING: {
-                if ( size == 0 ) {
-                    size = string_data_.at(key).size();
-                    write_log(std::format("\tsetting size = {}", size));
-                }
-                else {
-                    if ( size != string_data_.at(key).size() ) {
-                        write_log(std::format("\tsize = {}, data size = {}", size, string_data_.at(key).size()));
-                        write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
-                        result = false;
+                    break;
+                case DataType::DOUBLE: {
+                    if ( size == 0 ) {
+                        size = double_data_.at(key).size();
+                        write_log(std::format("\tsetting size = {}", size));
                     }
                     else {
-                        write_log(std::format("\t{}", size));
+                        if ( size != double_data_.at(key).size() ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, double_data_.at(key).size()));
+                            write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                            result = false;
+                        }
+                        else {
+                            write_log(std::format("\t{}", size));
+                        }
                     }
                 }
+                    break;
+                case DataType::STRING: {
+                    if ( size == 0 ) {
+                        size = string_data_.at(key).size();
+                        write_log(std::format("\tsetting size = {}", size));
+                    }
+                    else {
+                        if ( size != string_data_.at(key).size() ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, string_data_.at(key).size()));
+                            write_err_log( std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
+                            result = false;
+                        }
+                        else {
+                            write_log(std::format("\t{}", size));
+                        }
+                    }
+                }
+                    break;
+                case DataType::NONE:
+                    result = false;
+                    break;
+                }
             }
-                break;
-            case DataType::NONE:
-                result = false;
-                break;
+
+            if ( result ) {
+                n_rows_ = size;
             }
+
+            return result;
         }
-
-        if ( result ) {
-            n_rows_ = size;
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::update_n_rows>");
+            return false;
         }
-
-        return result;
     }
 
     // COMPLETE?
@@ -486,6 +495,8 @@ namespace burn_in_data_report
             * original state back.
             */
 
+            write_log(std::format("Applying reductions to {}", _key));
+
             // Check _key is valid
             if ( !type_map_.contains(_key) )
                 return false;
@@ -515,14 +526,25 @@ namespace burn_in_data_report
 
             // No reduction if it isn't set & no_rows < MAX_ROWS
             // If no_rows > MAX_ROWS, MUST be reduced to fit in excel
-            if ( _r_type == reduction_type::none && no_rows < MAX_ROWS )
+            if ( _r_type == reduction_type::none && no_rows < MAX_ROWS ) {
+                write_log(" - No reductions to apply.");
                 return true;
+            }
+
+            write_log(std::format("Reduction to apply: {}", static_cast<int>(_r_type)));
+            write_log(std::format("Average type: {}", static_cast<int>(_a_type)));
+            write_log(std::format("n_points: {}", _n_points));
+            write_log(std::format("n_group: {}", _n_group));
 
             // Average by each cycle, this will likely always be true
             // Still may be useful to have the option to not use it
-            if ( _r_type == reduction_type::DEFAULT
-                 || _r_type == reduction_type::all
-                 || no_rows > MAX_ROWS ) {
+            if ( (_r_type == reduction_type::DEFAULT
+                 || _r_type == reduction_type::all)
+                 && !filters_.empty() ) {
+
+                write_log(" - Applying default (averaging by cycle) reductions.");
+                write_log(std::format("   Filter size: {}", filters_.size()));
+
                 // Need to think of acceptable way to do strings
                 // For now will use lambda which returns NaN values
                 // As it doesn't make much sense to "take the average
@@ -726,8 +748,6 @@ namespace burn_in_data_report
                 // Clear filter now cycles have been
                 // avg'd into single data points
                 filters_copy.clear();
-
-                write_log("Done.");
             }
 
             // Average by groups of n_group_ points
@@ -735,11 +755,12 @@ namespace burn_in_data_report
                   || _r_type == reduction_type::all)
                  && _n_group > 0
                  && _n_group < file_.get_n_rows() ) {
+
+                write_log(" - Applying number of points per group reduction.");
+
                 if ( _n_group == 1 ) {
                     goto NPOINTS;
                 }
-
-                write_log("Averaging by group...");
 
                 // Lambda function to handle averaging
                 auto avg
@@ -935,8 +956,11 @@ namespace burn_in_data_report
                   _r_type == reduction_type::all) &&
                  _n_points > 0 &&
                  _n_points < file_.get_n_rows() ||
-                 _n_points > MAX_ROWS ||
-                 no_rows > MAX_ROWS ) {
+                 (_n_points > MAX_ROWS ||
+                 no_rows > MAX_ROWS) ) {
+
+                write_log(" - Applying reduction by total n_points.");
+
                 auto avg =
                     []<ArithmeticType R>
                 ( const std::vector<R>& data,
@@ -1103,7 +1127,6 @@ namespace burn_in_data_report
 
                 write_log("Done.");
             }
-
             return true;
         }
         catch ( const std::exception& err ) {
@@ -1185,7 +1208,7 @@ namespace burn_in_data_report
             // Check column exists & not already loaded
             for ( const auto& [key, type] : file_.get_col_types() ) {
                 if ( key == _key ) {
-                    if ( type_map_.contains(key) /*|| _key == std::string{"Combined Time"}*/ ) {
+                    if ( type_map_.contains(key) ) {
                         // Column is already loaded, exit
                         write_log(std::format("<spreadsheet::load_column> Column already loaded ({}).", _key));
                         return true;
@@ -1212,12 +1235,14 @@ namespace burn_in_data_report
             switch ( dtype ) {
             case DataType::INTEGER: {
                 int_data_[_key] = file_.get_i(_key);
+                write_log(std::format(" - Initial size: {}", int_data_[_key].size()));
                 i_errors_[_key] = {};
                 apply_reduction(_key,
                                 reduction_type_,
                                 average_type_,
                                 n_group_,
                                 n_points_);
+                write_log(std::format(" - Final size: {}", int_data_[_key].size()));
                 if ( !update_n_rows() ) {
                     throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
                 }
@@ -1225,12 +1250,14 @@ namespace burn_in_data_report
             }
             case DataType::DOUBLE: {
                 double_data_[_key] = file_.get_d(_key);
+                write_log(std::format(" - Initial size: {}", double_data_[_key].size()));
                 d_errors_[_key] = {};
                 apply_reduction(_key,
                                 reduction_type_,
                                 average_type_,
                                 n_group_,
                                 n_points_);
+                write_log(std::format(" - Final size: {}", double_data_[_key].size()));
                 if ( !update_n_rows() ) {
                     throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
                 }
@@ -1238,12 +1265,14 @@ namespace burn_in_data_report
             }
             case DataType::STRING: {
                 string_data_[_key] = file_.get_s(_key);
+                write_log(std::format(" - Initial size: {}", string_data_[_key].size()));
                 s_errors_[_key] = {};
                 apply_reduction(_key,
                                 reduction_type_,
                                 average_type_,
                                 n_group_,
                                 n_points_);
+                write_log(std::format(" - Final size: {}", string_data_[_key].size()));
                 if ( !update_n_rows() ) {
                     throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
                 }
@@ -1357,6 +1386,9 @@ namespace burn_in_data_report
                          const uinteger& _n = 2,
                          const uinteger& _max_range_sz = 0 ) noexcept {
         try {
+
+            write_log("Filtering data:");
+
             // Check valid cutoff fraction & that _key exists / has been loaded
             if ( !(0 <= _cutoff && _cutoff < 1 && type_map_.contains( _key ) ) ) {
                 throw std::runtime_error("Invalid filter parameters received.");
@@ -1364,6 +1396,11 @@ namespace burn_in_data_report
             if ( type_map_.at( _key ) == DataType::STRING ||
                  type_map_.at( _key ) == DataType::NONE ) {
                 throw std::runtime_error("Selected column type is unsupported.");
+            }
+
+            if ( _cutoff == 0.0 && _max_range_sz == 1 ) {
+                write_log( " - cutoff = 0.0, max_range_sz = 1 -> No filter required." );
+                return true;
             }
 
             // get DataType of provided _key
@@ -1376,41 +1413,62 @@ namespace burn_in_data_report
             std::map<std::string, integer> int_cutoff;
             std::map<std::string, double> double_cutoff;
 
-            // Calculate cutoff values as fraction of max datapoint
-            auto check_MAX =
-                []<ArithmeticType T>( const std::vector<T>& data ) -> T {
-                    assert(!data.empty());
-                    T max { data[0] };
-                    write_log(std::format("data.size(): {}", data.size()));
-                    size_t i{ 0 };
-                    for ( auto iter { data.begin() }; iter != data.end(); ++iter, ++i) {
-                        write_log(std::format("{}", i));
-                        max = MAX(max, *iter);
+            if ( _cutoff == 0.0 ) {
+                for ( const auto& [key, type] : type_map_ ) {
+                    switch ( type ) {
+                    case DataType::INTEGER:
+                        int_cutoff[key] = std::numeric_limits<integer>::min();
+                        break;
+                    case DataType::DOUBLE:
+                        double_cutoff[key] = std::numeric_limits<double>::min();
+                        break;
+                    case DataType::STRING:
+                        break;
+                    case DataType::NONE:
+                        throw std::runtime_error("Invalid DataType received.");
                     }
-                    return max;
-            };
-            for ( const auto& [key, type] : type_map_ ) {
-                write_log(std::format("{}: {}", key, type_string.at(type)));
-                switch ( type ) {
-                case DataType::INTEGER:
-                    int_cutoff[key] = static_cast<integer>(
-                        _cutoff * static_cast<double>(
-                            check_MAX(int_data_.at(key)) ) );
-                    if ( key == _key ) {
-                        write_log(std::format("\t- {} Cutoff: {}", _key, int_cutoff[key]));
+                }
+            }
+            else {
+                // Calculate cutoff values as fraction of max datapoint
+                auto check_MAX =
+                    []<ArithmeticType T>( const std::vector<T>& data ) -> T {
+                        assert(!data.empty());
+                        T max { data[0] };
+                        size_t i{ 0 };
+                        for ( auto iter { data.begin() }; iter != data.end(); ++iter, ++i) {
+                            max = MAX(max, *iter);
+                        }
+                        return max;
+                };
+                for ( const auto& [key, type] : type_map_ ) {
+                    write_log(std::format(" - {}: {}", key, type_string.at(type)));
+
+                    // Calculate cutoff value for each numeric key in loaded data
+                    switch ( type ) {
+                    case DataType::INTEGER: {
+                        write_log(std::format(" - size of data({}): {}", key, int_data_.at(key).size()));
+                        int_cutoff[key] = static_cast<integer>(
+                            _cutoff * static_cast<double>(check_MAX(int_data_.at(key)) )
+                        );
+                        if ( key == _key ) {
+                            write_log(std::format(" - {} Cutoff: {}", _key, int_cutoff[key]));
+                        }
                     }
-                    break;
-                case DataType::DOUBLE:
-                    write_log(std::format("size of data({}): {}", key, double_data_.at(key).size()));
-                    double_cutoff[key] = _cutoff * check_MAX(double_data_.at(key));
-                    if ( key == _key ) {
-                        write_log(std::format("\t- {} Cutoff: {}", _key, double_cutoff[key]));
+                        break;
+                    case DataType::DOUBLE: {
+                        write_log(std::format(" - size of data({}): {}", key, double_data_.at(key).size()));
+                        double_cutoff[key] = _cutoff * check_MAX(double_data_.at(key));
+                        if ( key == _key ) {
+                            write_log(std::format(" - {} Cutoff: {}", _key, double_cutoff[key]));
+                        }
                     }
-                    break;
-                case DataType::STRING:
-                    break;
-                case DataType::NONE:
-                    throw std::runtime_error("Invalid DataType received.");
+                        break;
+                    case DataType::STRING:
+                        break;
+                    case DataType::NONE:
+                        throw std::runtime_error("Invalid DataType received.");
+                    }
                 }
             }
 
@@ -1524,7 +1582,7 @@ namespace burn_in_data_report
                 return results;
             };
 
-            write_log("Extracting ranges...");
+            write_log(std::format(" - Extracting ranges: {}", _key));
             // Calculate filters
             switch ( dtype ) {
             case DataType::INTEGER:
@@ -1793,6 +1851,54 @@ namespace burn_in_data_report
         catch ( const std::exception& err ) {
             write_err_log( err, "DLL: <spreadsheet::type>" );
             return DataType::NONE;
+        }
+    }
+
+    inline [[nodiscard]] bool
+    spreadsheet::clear_changes() noexcept {
+        try {
+            write_log("Clearing changes:");
+
+            filters_.clear();
+            int_data_.clear();
+            i_errors_.clear();
+            double_data_.clear();
+            d_errors_.clear();
+            string_data_.clear();
+            s_errors_.clear();
+
+            reduction_type_ = reduction_type::none;
+            average_type_ = avg_type::stable_mean;
+            n_group_ = 1;
+            n_points_ = 0;
+            n_rows_ = 0;
+
+            for ( const auto& [key, type] : type_map_ ) {
+                write_log(std::format(" - {}: {}", key, type_string.at(type)));
+                switch ( type ) {
+                case DataType::INTEGER:
+                    int_data_[key] = file_.get_i(key);
+                    break;
+                case DataType::DOUBLE:
+                    double_data_[key] = file_.get_d(key);
+                    break;
+                case DataType::STRING:
+                    string_data_[key] = file_.get_s(key);
+                    break;
+                case DataType::NONE:
+                    break;
+                }
+            }
+
+            if ( !update_n_rows() ) {
+                throw std::runtime_error("DLL: <spreadsheet::load_column> Data length mismatch.");
+            }
+
+            return true;
+        }
+        catch ( const std::exception& err ) {
+            write_err_log( err, "DLL: <spreadsheet::clear_changes>");
+            return false;
         }
     }
 
