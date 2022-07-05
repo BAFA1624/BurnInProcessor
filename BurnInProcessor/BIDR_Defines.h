@@ -138,6 +138,8 @@ namespace burn_in_data_report
     using DMap = std::unordered_map<std::string, std::vector<double>>;
     using SMap = std::unordered_map<std::string, std::vector<std::string>>;
 
+    using indices_t = std::vector<std::pair<uinteger, uinteger>>;
+
     template <typename T>
     std::vector<T>
     VSlice( const std::vector<T>& _v, const uinteger& _a,
@@ -153,6 +155,13 @@ namespace burn_in_data_report
         // floating point*/
         NONE      // Mostly for errors, not sure if it's needed
     };          // Enum mapping descriptive type name to 0, 1, 2, 3
+    const std::map<DataType, std::string> type_string {
+            { DataType::INTEGER, "INT" },
+            { DataType::DOUBLE, "DOUBLE" },
+            { DataType::STRING, "STRING" },
+            //{ DataType::DATETIME, "DATETIME" },
+            { DataType::NONE, "NONE" }
+        };
     using TypeMap = std::unordered_map<std::string, DataType>;
     // Vector of { column title : DataType } pairs <-- In correct column order
     using TVec = std::vector<std::pair<std::string, DataType>>;
@@ -897,7 +906,7 @@ namespace burn_in_data_report
 
     static std::pair<std::vector<double>, std::vector<double>>
     cycle_average( const std::vector<integer>& _data,
-                   const std::vector<std::pair<uinteger, uinteger>>& _filter,
+                   const indices_t& _filter,
                    const std::vector<double>& _std_deviations,
                    double (*_func) (
                        const std::vector<integer>&,
@@ -931,7 +940,7 @@ namespace burn_in_data_report
     }
     static std::pair<std::vector<double>, std::vector<double>>
     cycle_average( const std::vector<double>& _data,
-                   const std::vector<std::pair<uinteger, uinteger>>& _filter,
+                   const indices_t& _filter,
                    const std::vector<double>& _std_deviations,
                    double (*_func) (
                        const std::vector<double>&,
@@ -1040,6 +1049,13 @@ namespace burn_in_data_report
         ngroup,
         all,
         none
+    };
+    const std::map<reduction_type, std::string> reduction_string{
+        {reduction_type::DEFAULT, "DEFAULT"},
+        {reduction_type::npoints, "npoints"},
+        {reduction_type::ngroup, "ngroup"},
+        {reduction_type::all, "all"},
+        {reduction_type::none, "none"}
     };
 
     template <typename KeyType, typename ValueType>
@@ -1173,7 +1189,7 @@ namespace burn_in_data_report
     }
 
     template <typename T>
-    std::vector<std::pair<uinteger, uinteger>>
+    indices_t
     sub_range_split( const std::vector<T>& vec,
                      const uinteger&       start,
                      const uinteger&       end,
@@ -1345,6 +1361,26 @@ namespace burn_in_data_report
             write_err_log(std::runtime_error("<copy_file> Source file does not exist."));
             return false;
         }
+    }
+
+    template <ArithmeticType T>
+    auto
+    check_max(const std::vector<T>& data) {
+        if ( data.empty() ) {
+            write_err_log(std::runtime_error("<check_max> Empty vector received."));
+            return std::numeric_limits<T>::lowest();
+        }
+        return *std::max_element(data.cbegin(), data.cend());
+    }
+
+    template <ArithmeticType T>
+    auto
+    check_min(const std::vector<T>& data) {
+        if ( data.empty() ) {
+            write_err_log(std::runtime_error("<check_min> Empty vector received."));
+            return std::numeric_limits<T>::max();
+        }
+        return *std::min_element(data.begin(), data.end());
     }
 
 } // namespace burn_in_data_report

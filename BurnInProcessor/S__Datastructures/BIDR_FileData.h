@@ -62,13 +62,6 @@ namespace burn_in_data_report
             { encoding_type::UTF16_BE, "UTF16_BE" },
             { encoding_type::UTF16_LE, "UTF16_LE" }
         };
-    const std::map<DataType, std::string> type_string {
-            { DataType::INTEGER, "INT" },
-            { DataType::DOUBLE, "DOUBLE" },
-            { DataType::STRING, "STRING" },
-            //{ DataType::DATETIME, "DATETIME" },
-            { DataType::NONE, "NONE" }
-        };
 
     static bool
     check_valid_state( const std::vector<bool>& bools ) {
@@ -1465,16 +1458,12 @@ namespace burn_in_data_report
                     }
                     case DataType::INTEGER: {
                         const auto& data = _ints.at(title_type.first);
-                        for ( const integer& val : data )
-                            max_int = MAX(max_int, val);
-                        _stats.max_ints[title_type.first] = max_int;
+                        _stats.max_ints[title_type.first] = check_max(data);
                         break;
                     }
                     case DataType::DOUBLE: {
                         const auto& data = _doubles.at(title_type.first);
-                        for ( const double& val : data )
-                            max_double = MAX(max_double, val);
-                        _stats.max_doubles[title_type.first] = max_double;
+                        _stats.max_doubles[title_type.first] = check_max(data);
                         break;
                     }
                     }
@@ -1495,16 +1484,14 @@ namespace burn_in_data_report
                     }
                     case DataType::INTEGER: {
                         const auto& data = _ints.at(title_type.first);
-                        for ( const integer& val : data )
-                            min_int = MIN(min_int, val);
-                        _stats.min_ints[title_type.first] = min_int;
+                        _stats.min_ints[title_type.first] = check_min(data);
                         break;
                     }
                     case DataType::DOUBLE: {
                         const auto& data = _doubles.at(title_type.first);
                         for ( const double& val : data )
                             min_double = MIN(min_double, val);
-                        _stats.min_doubles[title_type.first] = min_double;
+                        _stats.min_doubles[title_type.first] = check_min(data);
                         break;
                     }
                     }
@@ -1542,9 +1529,9 @@ namespace burn_in_data_report
             std::future<void> set_min =
                 std::async(SetMin, std::cref(ints), std::cref(doubles),
                            std::cref(settings), std::ref(statistics));
-            std::future<void> set_n = std::async(
-                                                 Set_n, std::cref(ints), std::cref(doubles), std::cref(strings),
-                                                 std::cref(settings), std::ref(statistics));
+            std::future<void> set_n =
+                std::async(Set_n, std::cref(ints), std::cref(doubles), std::cref(strings),
+                           std::cref(settings), std::ref(statistics));
 
             if ( std::string method = settings.get_config().at("interval").at("method");
                 method == "Automatic" ) {
