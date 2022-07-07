@@ -1,14 +1,16 @@
 #include "pch.h"
 #include "BurnInDataReport.h"
 
+// Global spreadsheet variable
 static bidr::spreadsheet spreadsheet;
 
+// Not exported
 BOOL WINAPI
 load_files( _In_ const LPSAFEARRAY* ppsa,
             _In_ LPVARIANT raw_config_loc_name,
             _In_ const uinteger& max_header_sz,
             _In_ const double& max_off_time_minutes,
-            _In_ const BOOL& do_trimming ) {
+            _In_ const bool& do_trimming ) {
     try {
         write_log("Adding files...");
         CComSafeArray<VARIANT> variant_filenames(*ppsa);
@@ -48,6 +50,7 @@ load_files( _In_ const LPSAFEARRAY* ppsa,
     }
 }
 
+// Exported
 BOOL WINAPI
 clear_spreadsheet() {
     try {
@@ -66,19 +69,20 @@ clear_spreadsheet() {
     }
 }
 
+// Exported
 BOOL WINAPI
 init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
                   _In_ LPVARIANT raw_config_loc_name,
                   _In_ const uinteger& max_header_sz,
                   _In_ const double& max_off_time_minutes,
-                  _In_ const BOOL& do_trimming,
+                  _In_ const int& do_trimming,
                   _In_ LPVARIANT log_file_path ) {
     try {
         log_location = bidr::bstr_string_convert(_bstr_t(log_file_path));
         BOOL result = clear_spreadsheet();
         write_log("Initializing spreadsheet...");
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
-                             max_off_time_minutes, do_trimming);
+                             max_off_time_minutes, do_trimming == FALSE ? false : true);
         return result;
     }
     catch ( const std::exception& err ) {
@@ -87,6 +91,7 @@ init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
     }
 }
 
+// Exported
 BOOL WINAPI
 add_file( LPVARIANT v_filename ) {
     try {
@@ -108,6 +113,7 @@ add_file( LPVARIANT v_filename ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 add_files( LPSAFEARRAY* ppsa ) {
     CComSafeArray<VARIANT> var_csa;
@@ -137,6 +143,7 @@ add_files( LPSAFEARRAY* ppsa ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 remove_file( const uinteger& idx ) {
     try {
@@ -151,6 +158,7 @@ remove_file( const uinteger& idx ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 remove_files( LPSAFEARRAY* ppsa ) {
     try {
@@ -171,6 +179,7 @@ remove_files( LPSAFEARRAY* ppsa ) {
     }
 }
 
+// Exported
 LPSAFEARRAY WINAPI
 get_current_cols() {
     try {
@@ -187,6 +196,7 @@ get_current_cols() {
     }
 }
 
+// Exported
 LPSAFEARRAY WINAPI
 get_available_cols() {
     try {
@@ -204,6 +214,7 @@ get_available_cols() {
     }
 }
 
+// Exported
 BOOL WINAPI
 load_column( LPVARIANT v_col_title ) {
     try {
@@ -227,6 +238,7 @@ load_column( LPVARIANT v_col_title ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 load_columns( LPSAFEARRAY* ppsa ) {
     try {
@@ -258,6 +270,7 @@ load_columns( LPSAFEARRAY* ppsa ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 unload_column( LPVARIANT v_col_title ) {
     try {
@@ -278,6 +291,7 @@ unload_column( LPVARIANT v_col_title ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 unload_columns( LPSAFEARRAY* ppsa ) {
     try {
@@ -309,6 +323,7 @@ unload_columns( LPSAFEARRAY* ppsa ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 filter( LPVARIANT v_col_title,
         const double& cutoff,
@@ -327,6 +342,7 @@ filter( LPVARIANT v_col_title,
     }
 }
 
+// Exported
 BOOL WINAPI
 reduce_data( const uinteger& reduction_type,
              const uinteger& average_type,
@@ -346,6 +362,7 @@ reduce_data( const uinteger& reduction_type,
     }
 }
 
+// Exported
 BOOL WINAPI
 is_initialized() {
     return spreadsheet.is_initialized()
@@ -353,12 +370,14 @@ is_initialized() {
                : FALSE;
 }
 
+// Exported
 uinteger WINAPI
 n_rows() {
     write_log(std::format("n_rows: {}", spreadsheet.n_rows()));
     return spreadsheet.n_rows();
 }
 
+// Exported
 LPSAFEARRAY WINAPI
 get( LPVARIANT key ) {
     try {
@@ -410,6 +429,7 @@ get( LPVARIANT key ) {
     }
 }
 
+// Exported
 LPSAFEARRAY WINAPI
 get_error( LPVARIANT key ) {
     try {
@@ -435,6 +455,7 @@ get_error( LPVARIANT key ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 contains( LPVARIANT key ) {
     try {
@@ -449,6 +470,7 @@ contains( LPVARIANT key ) {
     }
 }
 
+// Exported
 integer WINAPI
 type( LPVARIANT key ) {
     using DT = bidr::DataType;
@@ -465,6 +487,7 @@ type( LPVARIANT key ) {
     }
 }
 
+// Exported
 BOOL WINAPI
 clear_changes() {
     try {

@@ -138,7 +138,8 @@ namespace burn_in_data_report
     using DMap = std::unordered_map<std::string, std::vector<double>>;
     using SMap = std::unordered_map<std::string, std::vector<std::string>>;
 
-    using indices_t = std::vector<std::pair<uinteger, uinteger>>;
+    using range_t = std::pair<uinteger, uinteger>;
+    using indices_t = std::vector<range_t>;
 
     template <typename T>
     std::vector<T>
@@ -629,7 +630,7 @@ namespace burn_in_data_report
         return sum_weights_means / sum_weights;
     }
 
-    static std::pair<uinteger, uinteger>
+    static range_t
     stable_period_convert( const uinteger _start, const uinteger _last ) {
         try {
             const uinteger midpoint            = std::midpoint(_start, _last);
@@ -645,7 +646,7 @@ namespace burn_in_data_report
         }
     }
 
-    static std::pair<uinteger, uinteger>
+    static range_t
     stable_period_convert_debug( const uinteger _start, const uinteger _last ) {
         std::cout << "stable_period_convert: _start = " << _start
             << ", _last = " << _last << std::endl;
@@ -655,8 +656,8 @@ namespace burn_in_data_report
         uinteger three_quarter_point = std::midpoint(midpoint, _last);
         std::cout << "                       midpoint = " << midpoint << std::endl;
         std::cout << "                       three_quarter_point  = " << three_quarter_point << std::endl;
-        std::pair<uinteger, uinteger> result { quarter_point, three_quarter_point };
-        std::pair<uinteger, uinteger> fallback_result { _start, _last };
+        range_t result { quarter_point, three_quarter_point };
+        range_t fallback_result { _start, _last };
         std::cout << "                       result = (" << result.first << ", " << result.second << ")" << std::endl;
         std::cout << "                       fallback_result = (" << fallback_result.first << ", " << fallback_result.
             second << ")" << std::endl;
@@ -1134,14 +1135,12 @@ namespace burn_in_data_report
 
     template <typename T>
     T
-    VecMax( const std::vector<T>& arr, const T& init_val ) {
+    VecMax( const std::vector<T>& arr ) {
         if ( arr.size() == 0 ) {
             std::out_of_range err("Can\'t call VecMax on empty array.");
             throw err;
         }
-        T max = init_val;
-        for ( auto iter = arr.begin() + 1; iter != arr.end(); ++iter ) { max = MAX(*iter, max); }
-        return max;
+        return *std::max_element(arr.cbegin(), arr.cend());
     }
 
 
@@ -1194,7 +1193,7 @@ namespace burn_in_data_report
                      const uinteger&       start,
                      const uinteger&       end,
                      const uinteger&       subrange_sz = 0 ) {
-        using range = std::pair<uinteger, uinteger>;
+        using range = range_t;
         if ( subrange_sz == 0 ) { return { range { start, end } }; }
         const uinteger     n_subranges { (((end - start) - 1) / subrange_sz) + 1 };
         std::vector<range> subranges;

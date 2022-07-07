@@ -75,8 +75,8 @@ extern "C"
                       _In_ LPVARIANT          raw_config_loc_name,
                       _In_ const uinteger&    max_header_sz,
                       _In_ const double&      max_off_time_minutes,
-                      _In_ const BOOL&        do_trimming,
-                      _In_ LPVARIANT log_file_path );
+                      _In_ const int&         do_trimming,
+                      _In_ LPVARIANT          log_file_path );
 
     BIDR_API BOOL WINAPI
     add_file( LPVARIANT v_filename );

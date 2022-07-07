@@ -128,7 +128,7 @@ namespace burn_in_data_report
             uinteger size =
                 std::accumulate(filters_.cbegin(), filters_.cend(),
                                 static_cast<uinteger>( 0 ),
-                                []( uinteger x, const std::pair<uinteger, uinteger>& p ) {
+                                []( uinteger x, const range_t& p ) {
                                     return x + (p.second - p.first);
                                 });
             return size;
@@ -334,17 +334,33 @@ namespace burn_in_data_report
             uinteger size { 0 };
             write_log("update_n_rows:");
 
+            constexpr auto get_size =
+                []<typename T>(const std::vector<T>& v, const indices_t& f) {
+                    if ( f.empty() ) {
+                        return v.size();
+                    }
+                    else {
+                        return
+                            std::accumulate(
+                                f.cbegin(), f.cend(),
+                                static_cast<uinteger>(0),
+                                [](uinteger sum, const range_t& r)
+                                { return sum += (r.second - r.first); }
+                            );
+                    }
+                };
+
             for ( const auto& [key, type] : type_map_ ) {
                 write_log(std::format("({}, {}):", key, type_string.at(type)));
                 switch ( type ) {
                 case DataType::INTEGER: {
                     if ( size == 0 ) {
-                        size = int_data_.at(key).size();
+                        size = get_size(int_data_.at(key), filters_);
                         write_log(std::format("\tsetting size = {}", size));
                     }
                     else {
-                        if ( size != int_data_.at(key).size() ) {
-                            write_log(std::format("\tsize = {}, data size = {}", size, int_data_.at(key).size()));
+                        if ( size != get_size(int_data_.at(key), filters_) ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, get_size(int_data_.at(key), filters_)));
                             write_err_log(std::runtime_error("\tDLL: <spreadsheet::update_n_rows> Data length mismatch."));
                             result = false;
                         }
@@ -354,12 +370,12 @@ namespace burn_in_data_report
                 break;
                 case DataType::DOUBLE: {
                     if ( size == 0 ) {
-                        size = double_data_.at(key).size();
+                        size = get_size(double_data_.at(key), filters_);
                         write_log(std::format("\tsetting size = {}", size));
                     }
                     else {
-                        if ( size != double_data_.at(key).size() ) {
-                            write_log(std::format("\tsize = {}, data size = {}", size, double_data_.at(key).size()));
+                        if ( size != get_size(double_data_.at(key), filters_) ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, get_size(double_data_.at(key), filters_)));
                             write_err_log(std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
                             result = false;
                         }
@@ -369,12 +385,12 @@ namespace burn_in_data_report
                 break;
                 case DataType::STRING: {
                     if ( size == 0 ) {
-                        size = string_data_.at(key).size();
+                        size = get_size(string_data_.at(key), filters_);
                         write_log(std::format("\tsetting size = {}", size));
                     }
                     else {
-                        if ( size != string_data_.at(key).size() ) {
-                            write_log(std::format("\tsize = {}, data size = {}", size, string_data_.at(key).size()));
+                        if ( size != get_size(string_data_.at(key), filters_) ) {
+                            write_log(std::format("\tsize = {}, data size = {}", size, get_size(string_data_.at(key), filters_)));
                             write_err_log(std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch."));
                             result = false;
                         }
@@ -520,7 +536,7 @@ namespace burn_in_data_report
                 no_rows =
                     std::accumulate(filters_.cbegin(), filters_.cend(),
                                     static_cast<uinteger>( 0 ),
-                                    []( const uinteger sum, const std::pair<uinteger, uinteger>& p ) {
+                                    []( const uinteger sum, const range_t& p ) {
                                         return sum + (p.second - p.first);
                                     });
             }
@@ -531,11 +547,6 @@ namespace burn_in_data_report
                 write_log(" - No reductions to apply.");
                 return true;
             }
-
-            write_log(std::format("Reduction to apply: {}", static_cast<int>( _r_type )));
-            write_log(std::format("Average type: {}", static_cast<int>( _a_type )));
-            write_log(std::format("n_points: {}", _n_points));
-            write_log(std::format("n_group: {}", _n_group));
 
             // Average by each cycle, this will likely always be true
             // Still may be useful to have the option to not use it
@@ -762,7 +773,7 @@ namespace burn_in_data_report
                     = []<typename K>
                 ( const std::vector<K>& data,
                   std::vector<K>& reduced_storage,
-                  const std::vector<std::pair<uinteger, uinteger>>& filters,
+                  const indices_t& filters,
                   const uinteger& n_group )
                 -> bool {
                     try {
@@ -792,7 +803,7 @@ namespace burn_in_data_report
                                 std::accumulate(
                                     filters_copy.cbegin(), filters_copy.cend(),
                                     static_cast<uinteger>( 0 ),
-                                    []( const uinteger& lhs,const std::pair<uinteger, uinteger>& rhs )
+                                    []( const uinteger& lhs,const range_t& rhs )
                                     { return lhs + (rhs.second - rhs.first); }
                                 );
                         }
@@ -823,9 +834,9 @@ namespace burn_in_data_report
                         const auto valid_data_pipeline =
                             std::views::transform(
                                 [](const auto& pair)
-                                { return std::views::iota(pair.first, pair.second); }) |
-                            std::views::join |
-                            std::views::transform([&](const auto& idx){ return data[idx]; });
+                                { return std::views::iota(pair.first, pair.second); })
+                            | std::views::join
+                            | std::views::transform([&](const auto& idx){ return data[idx]; });
 
                         if ( filters_copy.empty() ) {
                             filters_copy = { {0, data.size() } };
@@ -880,7 +891,7 @@ namespace burn_in_data_report
                     std::accumulate(
                         filters_copy.cbegin(), filters_copy.cend(),
                         static_cast<uinteger>( 0 ),
-                        []( const uinteger& lhs, const std::pair<uinteger, uinteger> & rhs )
+                        []( const uinteger& lhs, const range_t & rhs )
                         { return lhs + (rhs.second - rhs.  first); }
                     );
                 }
@@ -965,7 +976,7 @@ namespace burn_in_data_report
                 
                 auto avg =
                     []<ArithmeticType R>( const std::vector<R>& data, std::vector<R>& reduced_storage,
-                                          const std::vector<std::pair<uinteger, uinteger>>& filters,
+                                          const indices_t& filters,
                                           const uinteger& _n_points ) -> void {
                     // Storage for tmp data
                     std::vector<R> tmp;
@@ -979,7 +990,7 @@ namespace burn_in_data_report
                             std::accumulate(
                                 filters_copy.cbegin(), filters_copy.cend(),
                                 static_cast<uinteger>( 0 ),
-                                []( uinteger lhs, const std::pair<uinteger, uinteger> & pair )
+                                []( uinteger lhs, const range_t & pair )
                                 { return lhs + (pair.second - pair.first); }
                             );
                     }
@@ -1063,7 +1074,7 @@ namespace burn_in_data_report
                         std::accumulate(
                             filters_copy.cbegin(), filters_copy.cend(),
                             static_cast<uinteger>( 0 ),
-                            []( uinteger lhs, const std::pair<uinteger, uinteger> & pair )
+                            []( uinteger lhs, const range_t & pair )
                             { return lhs + (pair.second - pair.first); }
                         );
                 }
@@ -1074,16 +1085,17 @@ namespace burn_in_data_report
                     MAX_ROWS < _n_points || _n_points == 0
                         ? MAX_ROWS
                         : _n_points;
+                const uinteger n_group { sz / n_points }, overflow { sz % n_points };
 
                 switch ( type ) {
                 case DataType::INTEGER: {
                     avg(int_data_.at(_key),
                         i_reduced,
                         filters_copy,
-                        _n_points);
+                        n_points);
 
                     std_deviations.insert(std_deviations.end(),
-                                          _no_rows + offset,
+                                          n_points,
                                           std::numeric_limits<double>::signaling_NaN());
 
                     int_data_[_key] = i_reduced;
@@ -1091,16 +1103,14 @@ namespace burn_in_data_report
                     break;
                 }
                 case DataType::DOUBLE: {
-                    if ( d_errors_.contains(_key) )
-                        std_deviations = d_errors_.at(_key);
-                    else
-                        std_deviations.clear();
-
                     avg(double_data_.at(_key),
                         d_reduced,
-                        std_deviations,
                         filters_copy,
-                        _n_points);
+                        n_points);
+
+                    std_deviations.insert(std_deviations.end(),
+                                          n_points,
+                                          std::numeric_limits<double>::signaling_NaN());
 
                     double_data_[_key] = d_reduced;
                     d_errors_[_key] = std_deviations;
@@ -1109,26 +1119,19 @@ namespace burn_in_data_report
                 case DataType::STRING: {
                     auto& data = string_data_.at(_key);
                     uinteger sz;
-                    if ( !filters_.empty() ) {
-                        sz = std::accumulate(filters_copy.cbegin(), filters_copy.cend(),
-                                             static_cast<uinteger>( 0 ),
-                                             []( uinteger lhs,
-                                                 const std::pair<uinteger, uinteger>
-                                                 & rhs ) {
-                                                 return lhs + (rhs.second - rhs.
-                                                               first);
-                                             }
-                                            );
+                    if ( filters_.empty() ) {
+                        sz = data.size();
+                        
                     }
-                    else { sz = data.size(); }
-
-                    const uinteger n_points = (
-                        ((MAX_ROWS < _n_points) || (_n_points == 0))
-                            ? MAX_ROWS
-                            : _n_points);
-                    const uinteger n_group { sz / n_points }, overflow {
-                                           sz % n_points
-                                       };
+                    else {
+                        sz =
+                            std::accumulate(
+                                filters_copy.cbegin(), filters_copy.cend(),
+                                static_cast<uinteger>( 0 ),
+                                []( uinteger lhs, const range_t & rhs )
+                                { return lhs + (rhs.second - rhs.  first); }
+                            );
+                    }
 
                     s_reduced.reserve(n_points);
                     for ( uinteger i { 0 }; i < n_points; ++i ) {
@@ -1142,14 +1145,15 @@ namespace burn_in_data_report
                                               : static_cast<integer>( i ) * (static_cast<integer>( n_group ) + 1) + 1)
                             };
                         s_reduced.emplace_back(
-                                               concatenate(start, end, ",")
-                                              );
+                            concatenate(start, end, ",")
+                        );
                     }
+
                     std_deviations.insert(
-                                          std_deviations.end(),
-                                          n_points,
-                                          std::numeric_limits<double>::signaling_NaN()
-                                         );
+                        std_deviations.end(), n_points,
+                        std::numeric_limits<double>::signaling_NaN()
+                     );
+
                     string_data_[_key] = s_reduced;
                     s_errors_[_key] = std_deviations;
                     break;
@@ -1503,7 +1507,7 @@ namespace burn_in_data_report
                 const T& _threshold,
                 const uinteger& _n = 1,
                 const uinteger& _max_range_sz = 0
-            ) -> std::vector<std::pair<uinteger, uinteger>> {
+            ) -> indices_t {
                 /*
                 * - results: Stores resulting {start point, end point} pairs.
                 * - continuous_range: Indicates currently in a continuous run
@@ -1515,7 +1519,7 @@ namespace burn_in_data_report
                 *		   noise in otherwise continuous data.
                 * - branch: Tracks which possible branch is true
                 */
-                std::vector<std::pair<uinteger, uinteger>> results;
+                indices_t results;
                 results.reserve(_data.size() / 10);
                 bool continuous_range { false };
                 uinteger r_start { 0 }, r_end { 0 }, count { 0 };
@@ -1614,7 +1618,7 @@ namespace burn_in_data_report
             const uinteger sz =
                 std::accumulate(filters_.cbegin(), filters_.cend(),
                                 static_cast<uinteger>( 0 ),
-                                []( const uinteger x, const std::pair<uinteger, uinteger>& p ) {
+                                []( const uinteger x, const range_t& p ) {
                                     return x + (p.second - p.first);
                                 });
             write_log(std::format("Done. Filter size: {} ranges, {} elements.", filters_.size(), sz));
@@ -1677,7 +1681,7 @@ namespace burn_in_data_report
             const uinteger sz =
                 std::accumulate(filters_.cbegin(), filters_.end(),
                                 static_cast<uinteger>( 0 ),
-                                []( uinteger sum, const std::pair<uinteger, uinteger>& p ) {
+                                []( uinteger sum, const range_t& p ) {
                                     return sum + (p.second - p.first);
                                 });
 
@@ -1705,7 +1709,7 @@ namespace burn_in_data_report
             const uinteger sz =
                 std::accumulate(filters_.cbegin(), filters_.end(),
                                 static_cast<uinteger>( 0 ),
-                                []( uinteger sum, const std::pair<uinteger, uinteger>& p ) {
+                                []( uinteger sum, const range_t& p ) {
                                     return sum + (p.second - p.first);
                                 });
 
@@ -1733,7 +1737,7 @@ namespace burn_in_data_report
             const uinteger sz =
                 std::accumulate(filters_.cbegin(), filters_.end(),
                                 static_cast<uinteger>( 0 ),
-                                []( uinteger sum, const std::pair<uinteger, uinteger>& p ) {
+                                []( uinteger sum, const range_t& p ) {
                                     return sum + (p.second - p.first);
                                 });
 
@@ -1766,7 +1770,7 @@ namespace burn_in_data_report
                     const uinteger sz =
                         std::accumulate(filters_.cbegin(), filters_.cend(),
                                         static_cast<uinteger>( 0 ),
-                                        []( const uinteger size, const std::pair<uinteger, uinteger>& p ) {
+                                        []( const uinteger size, const range_t& p ) {
                                             return size + (p.second - p.first);
                                         });
 
@@ -1786,7 +1790,7 @@ namespace burn_in_data_report
                     const uinteger sz =
                         std::accumulate(filters_.cbegin(), filters_.cend(),
                                         static_cast<uinteger>( 0 ),
-                                        []( const uinteger size, const std::pair<uinteger, uinteger>& p ) {
+                                        []( const uinteger size, const range_t& p ) {
                                             return size + (p.second - p.first);
                                         });
 
@@ -1806,7 +1810,7 @@ namespace burn_in_data_report
                     const uinteger sz =
                         std::accumulate(filters_.cbegin(), filters_.cend(),
                                         static_cast<uinteger>( 0 ),
-                                        []( const uinteger size, const std::pair<uinteger, uinteger>& p ) {
+                                        []( const uinteger size, const range_t& p ) {
                                             return size + (p.second - p.first);
                                         });
 

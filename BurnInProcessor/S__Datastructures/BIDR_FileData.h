@@ -82,12 +82,12 @@ namespace burn_in_data_report
     template <typename T>
     static std::vector<T>
     apply_filter( const std::vector<T>& _data,
-                  const std::vector<std::pair<uinteger, uinteger>>& _filter ) {
+                  const indices_t& _filter ) {
         try {
             if ( _filter.size() == 0 ) { return _data; }
             uinteger sz = std::accumulate(
                                           _data.cbegin(), _data.cend(), static_cast<uinteger>( 0 ),
-                                          []( uinteger a, const std::pair<uinteger, uinteger>& b ) {
+                                          []( uinteger a, const range_t& b ) {
                                               return a + (b.second - b.first);
                                           });
             // Calculate size of new vector:
@@ -364,11 +364,7 @@ namespace burn_in_data_report
         }
 
         [[nodiscard]] std::vector<double> get_d( const std::string& _key ) const noexcept {
-            try {
-                const auto& x = doubles_.at(_key);
-                write_log(std::format("<get_d> {}: {}", _key, x.size()));
-                return x;
-            }
+            try { return doubles_.at(_key); }
             catch ( const std::exception& err ) {
                 write_err_log(err, std::format("DLL: <file_data::get_d> (key = {})", _key));
                 return std::vector<double> {};
@@ -1738,12 +1734,13 @@ namespace burn_in_data_report
         try {
             const auto& config = settings.get_config();
             const auto& filter_key = config.at("trim_filter_key").get<std::string>();
-            write_log(filter_key);
             const auto& type_map = settings.get_col_types();
+            if ( !type_map.contains(filter_key) ) {
+                write_log(std::format("\t\tInvalid or no trim key provided ({}).", filter_key));
+                return true;
+            }
             const auto& interval = settings.get_measurement_period();
-            write_log(std::to_string(interval.count()));
             const auto& data_type = type_map.at(filter_key);
-            write_log(type_string.at(data_type));
 
             assert(data_type != DataType::NONE);
 
@@ -1751,9 +1748,9 @@ namespace burn_in_data_report
             auto measure_downtime =
                 [&interval, &max_off_time]<ArithmeticType T>(
                 const std::vector<T>& data,
-                const T& cutoff ) -> std::vector<std::pair<uinteger, uinteger>> {
+                const T& cutoff ) -> indices_t {
                 // Storage for results & std::chrono::duration to measure time w/
-                std::vector<std::pair<uinteger, uinteger>> result;
+                indices_t result;
                 auto downtime = nano::zero();
                 uinteger first { 0 };
 
@@ -1794,7 +1791,7 @@ namespace burn_in_data_report
                 return result;
             };
 
-            std::vector<std::pair<uinteger, uinteger>> trim_ranges;
+            indices_t trim_ranges;
             // get sections of assumed invalid data
             switch ( data_type ) {
             case DataType::INTEGER: {
@@ -1813,51 +1810,82 @@ namespace burn_in_data_report
             }
 
             // Remove sections of invalid data from all columns & update length data
-            if ( trim_ranges.empty() ) {
-                write_log("No data to trim.");
-                return true;
-            }
-            write_log("Found data to trim.");
+            if ( trim_ranges.empty() ) { return true; }
 
             const auto remove_data =
                 [&trim_ranges]<typename T>( TMap<T>& map, const std::string& key ) {
-                for ( const auto& [first, last]
-                      : trim_ranges | std::views::reverse ) {
-                    map.at(key).erase(map.at(key).begin() + first, map.at(key).begin() + last);
-                }
-            };
+                    for ( const auto& [first, last]
+                          : trim_ranges | std::views::reverse ) {
+                        write_log(std::format("Removing data from idx {} -> {}.", first, last));
+                        map.at(key).erase(map.at(key).begin() + first, map.at(key).begin() + last);
+                    }
+                };
+
             for ( const auto& [key, type] : type_map ) {
                 if ( type == DataType::INTEGER ) { remove_data(ints, key); }
                 else if ( type == DataType::DOUBLE ) { remove_data(doubles, key); }
-                else if ( type == DataType::STRING || type == DataType::NONE ) { remove_data(strings, key); }
+                else if ( type == DataType::STRING ) { remove_data(strings, key); }
                 else { throw std::runtime_error("DLL: <trim_data> Invalid type encountered."); }
             }
 
             // All columns should be same length
             // Update lengths in ints_len, doubles_len, strings_len
-            ints_len = 0;
-            doubles_len = 0;
-            strings_len = 0;
-            if ( !ints.empty() ) {
-                ints_len = (*ints.cbegin()).second.size();
-                for ( const auto& vec : ints | std::views::values ) { assert(ints_len == vec.size()); }
-            }
-            if ( !doubles.empty() ) {
-                doubles_len = (*doubles.cbegin()).second.size();
-                for ( const auto& vec : doubles | std::views::values ) { assert(doubles_len == vec.size()); }
-            }
-            if ( !strings.empty() ) {
-                strings_len = (*strings.cbegin()).second.size();
-                for ( const auto& vec : strings | std::views::values ) { assert(strings_len == vec.size()); }
+            uinteger len{ 0 };
+            switch ( data_type ) {
+            case DataType::INTEGER:
+                len = ints.at(filter_key).size();
+                break;
+            case DataType::DOUBLE:
+                len = doubles.at(filter_key).size();
+                break;
+            case DataType::STRING:
+                len = strings.at(filter_key).size();
+                break;
+            case DataType::NONE:
+                break;
             }
 
-            const uinteger len {
-                    VecMax(std::vector<uinteger> { ints_len, doubles_len, strings_len },
-                           static_cast<uinteger>( 0 ))
-                };
-            if ( !ints.empty() ) { assert(ints_len == len); }
-            if ( !doubles.empty() ) { assert(doubles_len == len); }
-            if ( !strings.empty() ) { assert(strings_len == len); }
+            for ( const auto& [key, type] : type_map ) {
+                switch ( type ) {
+                case DataType::INTEGER:
+                    if ( ints.at(key).size() != len ) {
+                        throw
+                            std::runtime_error(
+                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                    key, type_string.at(type)
+                                )
+                            );
+                    }
+                    break;
+                case DataType::DOUBLE:
+                    if ( doubles.at(key).size() != len ) {
+                        throw
+                            std::runtime_error(
+                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                    key, type_string.at(type)
+                                )
+                            );
+                    }
+                    break;
+                case DataType::STRING:
+                    if ( strings.at(key).size() != len ) {
+                        throw
+                            std::runtime_error(
+                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                    key, type_string.at(type)
+                                )
+                            );
+                    }
+                    break;
+                case DataType::NONE:
+                    break;
+                }
+            }
+
+            ints_len = len;
+            doubles_len = len;
+            strings_len = len;
+            settings.set_n_rows(len);
 
             return true;
         }
@@ -1869,7 +1897,6 @@ namespace burn_in_data_report
 
     inline bool
     file_data::async_trim_data() noexcept {
-
         if ( !do_trimming_ ) { return true; }
 
         try {
