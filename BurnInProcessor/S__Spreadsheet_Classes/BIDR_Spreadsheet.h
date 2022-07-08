@@ -6,15 +6,6 @@
 
 namespace burn_in_data_report
 {
-    enum class avg_type
-    {
-        stable_mean,
-        overall_mean,
-        stable_median,
-        overall_median
-    };
-
-
     class spreadsheet
     {
     private:
@@ -344,8 +335,8 @@ namespace burn_in_data_report
                             std::accumulate(
                                 f.cbegin(), f.cend(),
                                 static_cast<uinteger>(0),
-                                [](uinteger sum, const range_t& r)
-                                { return sum += (r.second - r.first); }
+                                [](const uinteger sum, const range_t& r)
+                                { return sum + (r.second - r.first); }
                             );
                     }
                 };
@@ -371,7 +362,7 @@ namespace burn_in_data_report
                 case DataType::DOUBLE: {
                     if ( size == 0 ) {
                         size = get_size(double_data_.at(key), filters_);
-                        write_log(std::format("\tsetting size = {}", size));
+                        write_log(std::format("\tsetting size = {}, data size = {}", size, get_size(double_data_.at(key), filters_)));
                     }
                     else {
                         if ( size != get_size(double_data_.at(key), filters_) ) {
@@ -418,7 +409,7 @@ namespace burn_in_data_report
     inline bool
     spreadsheet::load_files(
         const std::vector<std::filesystem::directory_entry>& files,
-        const std::string& f_key = "PDOF 1",
+        const std::string& f_key = "Channel A",
         const std::filesystem::directory_entry& config_loc =
             std::filesystem::directory_entry { "" },
         const uinteger& header_max_lim = 256,
@@ -560,206 +551,84 @@ namespace burn_in_data_report
                 // For now will use lambda which returns NaN values
                 // As it doesn't make much sense to "take the average
                 // of a string"
+                const auto avg =
+                    [&, filters_copy, _a_type, _n_group, _n_points]<ArithmeticType T>
+                    (const std::vector<T>& data, const std::vector<double>& stdevs, const func_map<T>& a_func_map)
+                    -> std::pair<std::vector<T>, std::vector<double>> {
+                        const auto& [func, s_func] = a_func_map.at(_a_type);
+                        std::vector<T> avgs;
+                        std::vector<double> new_stdevs;
+                        avgs.reserve(filters_copy.size());
+                        new_stdevs.reserve(filters_copy.size());
+                        for ( const auto& [first, last] : filters_copy ) {
+                            avgs.emplace_back(
+                                static_cast<T>(func(data, first, last, stdevs))
+                            );
+                            new_stdevs.emplace_back(
+                                s_func(data, first, last, avgs.back(), stdevs, 0)
+                            );
+                        }
+                        return { avgs, new_stdevs };
+                    };
 
-                // Calculate averages
                 switch ( type ) {
                 case DataType::INTEGER: {
-                    switch ( _a_type ) {
-                    case avg_type::overall_mean: {
-                        if ( !i_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = i_errors_.at(_key);
-
-                        const auto& [mean_values, std_deviation_values] =
-                            cycle_average(int_data_.at(_key), filters_copy,
-                                          std_deviations, mean, stdev);
-
-                        int_data_[_key].clear();
-                        int_data_[_key].reserve(mean_values.size());
-                        for ( const auto& val : mean_values ) {
-                            int_data_[_key].emplace_back(
-                                                         static_cast<integer>( val ));
-                        }
-                        i_errors_[_key] = std_deviation_values;
-                        break;
-                    }
-                    case avg_type::overall_median: {
-                        if ( !i_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = i_errors_.at(_key);
-
-                        const auto& [median_values, std_deviation_values] =
-                            cycle_average(int_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          median,
-                                          stdev);
-
-                        int_data_[_key].clear();
-                        int_data_[_key].reserve(median_values.size());
-                        for ( const auto& val : median_values ) {
-                            int_data_[_key].emplace_back(
-                                                         static_cast<integer>( val ));
-                        }
-                        i_errors_[_key] = std_deviation_values;
-                        break;
-                    }
-                    case avg_type::stable_mean: {
-                        if ( !i_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = i_errors_.at(_key);
-
-                        const auto& [s_mean_values, s_std_deviation_values] =
-                            cycle_average(
-                                          int_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          stable_mean,
-                                          stable_stdev);
-
-                        int_data_[_key].clear();
-                        int_data_[_key].reserve(s_mean_values.size());
-                        for ( const auto& val : s_mean_values ) {
-                            int_data_[_key].emplace_back(
-                                                         static_cast<integer>( val ));
-                        }
-                        i_errors_[_key] = s_std_deviation_values;
-                        break;
-                    }
-                    case avg_type::stable_median: {
-                        if ( !i_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = i_errors_.at(_key);
-
-                        const auto& [s_median_values, s_std_deviation_values] =
-                            cycle_average(
-                                          int_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          stable_median,
-                                          stable_stdev);
-
-                        int_data_[_key].clear();
-                        int_data_[_key].reserve(s_median_values.size());
-                        for ( const auto& val : s_median_values ) {
-                            int_data_[_key].emplace_back(
-                                                         static_cast<integer>( val ));
-                        }
-                        i_errors_[_key] = s_std_deviation_values;
-                        break;
-                    }
-                    }
-                    no_rows = int_data_.at(_key).size();
-                    break;
-                }
+                    const auto& [avgs, std] =
+                        avg(int_data_.at(_key), i_errors_.at(_key), avg_func_map<integer>);
+                    int_data_.at(_key) = avgs;
+                    i_errors_.at(_key) = std;
+                } break;
                 case DataType::DOUBLE: {
-                    switch ( _a_type ) {
-                    case avg_type::overall_mean: {
-                        if ( !d_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = d_errors_.at(_key);
-
-                        const auto& [mean_values, std_deviation_values] =
-                            cycle_average(
-                                          double_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          mean,
-                                          stdev);
-
-                        double_data_[_key] = mean_values;
-                        d_errors_[_key] = std_deviation_values;
-                        break;
-                    }
-                    case avg_type::overall_median: {
-                        if ( !d_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = d_errors_.at(_key);
-
-                        const auto& [median_values, std_deviation_values] =
-                            cycle_average(double_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          median,
-                                          stdev);
-
-                        double_data_[_key] = median_values;
-                        d_errors_[_key] = std_deviation_values;
-                        break;
-                    }
-                    case avg_type::stable_mean: {
-                        if ( !d_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = d_errors_.at(_key);
-
-                        const auto& [s_mean_values, s_std_deviation_values] =
-                            cycle_average(double_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          stable_mean,
-                                          stable_stdev);
-                        double_data_[_key] = s_mean_values;
-                        d_errors_[_key] = s_std_deviation_values;
-                        break;
-                    }
-                    case avg_type::stable_median: {
-                        if ( !d_errors_.contains(_key) )
-                            std_deviations.clear();
-                        else
-                            std_deviations = d_errors_.at(_key);
-
-                        auto [s_median_values, s_std_deviation_values] =
-                            cycle_average(
-                                          double_data_.at(_key),
-                                          filters_copy,
-                                          std_deviations,
-                                          stable_median,
-                                          stable_stdev);
-
-                        double_data_[_key] = s_median_values;
-                        d_errors_[_key] = s_std_deviation_values;
-                        break;
-                    }
-                    }
-                    no_rows = double_data_.at(_key).size();
-
-                    break;
-                }
+                    const auto& [avgs, std] =
+                        avg(double_data_.at(_key), d_errors_.at(_key), avg_func_map<double>);
+                    double_data_.at(_key) = avgs;
+                    d_errors_.at(_key) = std;
+                } break;
                 case DataType::STRING: {
-                    // TODO: Find a better solution for this?
-                    // Currently just return NaN
+                    /*
+                     * Averaging string data doesn't make much sense.
+                     * Instead, concatenate data & give NaN as the standard deviation.
+                     */
                     const auto& data = string_data_.at(_key);
+
+                    // { { start_idx, end_idx }, ... } ==> { { start_idx, ..., end_idx }, ... }
+                    const auto range_to_span =
+                        [](const range_t& p){ return std::views::iota(p.first, p.second); };
+                    // idx -> data[idx]
+                    const auto idx_to_str =
+                        [&data](const uinteger& idx){ return data[idx]; };
+                    // { { start_idx, ..., end_idx }, ... } ==> { { data[start_idx], ..., data[end_idx] }, ... }
+                    const auto span_to_strs =
+                        [&idx_to_str](const auto& x) { return x | std::views::transform(idx_to_str); };
+                    // { { data[start_idx], ..., data[end_idx] }, ... } ==> { { data[start_idx] + ", " + ... + data[end_idx] }, ... }
+                    const auto strs_to_str =
+                        [](const auto& x){ return concatenate(x.begin(), x.end(), std::string_view{", "}); };
+
+                    auto filt_rng_to_str =
+                        std::views::transform(range_to_span)
+                        | std::views::transform(span_to_strs)
+                        | std::views::transform(strs_to_str);
 
                     std::vector<std::string> tmp;
                     tmp.reserve(filters_copy.size());
+                    s_errors_.at(_key).clear();
+                    s_errors_.reserve(filters_copy.size());
 
-                    for ( const auto& [first, last] : filters_copy ) {
-                        uinteger idx { (last - first) / 2 };
-                        tmp.emplace_back(data[idx]);
+                    for ( const auto& s : filters_copy | filt_rng_to_str ) {
+                        tmp.emplace_back(s);
+                        s_errors_.at(_key).emplace_back(std::numeric_limits<double>::signaling_NaN());
                     }
 
-                    string_data_[_key] = tmp;
-                    s_errors_[_key] =
-                        std::vector(filters_copy.size(),
-                                    std::numeric_limits<double>::signaling_NaN());
-
-                    no_rows = string_data_.at(_key).size();
-                    break;
-                }
-                case DataType::NONE: { break; }
+                    string_data_.at(_key) = std::move(tmp);
+                } break;
+                case DataType::NONE: {
+                    throw std::runtime_error("Invalid type received.");
+                } break;
                 }
 
                 // Clear filter now cycles have been
                 // avg'd into single data points
                 filters_copy.clear();
-                std_deviations.clear();
             }
 
             // Average by groups of n_group_ points
@@ -770,11 +639,12 @@ namespace burn_in_data_report
 
                 // Lambda function to handle averaging
                 auto avg
-                    = []<typename K>
+                    = [&_a_type]<typename K>
                 ( const std::vector<K>& data,
                   std::vector<K>& reduced_storage,
                   const indices_t& filters,
-                  const uinteger& n_group )
+                  const uinteger& n_group,
+                  const func_map<K>& a_func_map)
                 -> bool {
                     try {
                         // Clear any existing data in results storage
@@ -784,6 +654,8 @@ namespace burn_in_data_report
 
                         // Storage for copy of data about to be reduced
                         std::vector<K> tmp;
+                        const auto& [avg_func, std_func] =
+                            a_func_map.at(_a_type);
 
                         auto filters_copy = filters;
 
@@ -850,13 +722,13 @@ namespace burn_in_data_report
                             }
                             else {
                                 buf[buf_sz++] = v_data;
-                                tmp.emplace_back( static_cast<K>(mean(std::vector<K>(buf, buf + buf_sz))) );
+                                tmp.emplace_back( static_cast<K>(avg_func(std::vector<K>(buf, buf + buf_sz), 0, buf_sz, {})) );
                                 buf_sz = 0;
                             }
                         }
 
                         if ( buf_sz > 0 ) {
-                            tmp.emplace_back(static_cast<K>(mean(std::vector<K>(buf, buf + buf_sz))));
+                            tmp.emplace_back(static_cast<K>(avg_func(std::vector<K>(buf, buf + buf_sz), 0, buf_sz, {})));
                             buf_sz = 0;
                         }
 
@@ -907,7 +779,8 @@ namespace burn_in_data_report
                     avg(int_data_.at(_key),
                         i_reduced,
                         filters_copy,
-                        _n_group);
+                        _n_group,
+                        avg_func_map<integer>);
 
                     std_deviations.insert(std_deviations.end(),
                                           _no_rows + offset,
@@ -921,7 +794,8 @@ namespace burn_in_data_report
                     avg(double_data_.at(_key),
                         d_reduced,
                         filters_copy,
-                        _n_group);
+                        _n_group,
+                        avg_func_map<double>);
 
                     
                     std_deviations.insert(std_deviations.end(),
@@ -975,83 +849,85 @@ namespace burn_in_data_report
                 write_log(" - Applying reduction by total n_points.");
                 
                 auto avg =
-                    []<ArithmeticType R>( const std::vector<R>& data, std::vector<R>& reduced_storage,
-                                          const indices_t& filters,
-                                          const uinteger& _n_points ) -> void {
-                    // Storage for tmp data
-                    std::vector<R> tmp;
+                    [&_a_type]<ArithmeticType R>
+                    ( const std::vector<R>& data, std::vector<R>& reduced_storage,
+                    const indices_t& filters, const uinteger& _n_points,
+                    const func_map<R>& a_func_map) -> void {
+                        // Storage for tmp data
+                        std::vector<R> tmp;
+                        const auto& [avg_func, std_func] = a_func_map.at(_a_type);
 
-                    auto filters_copy = filters;
+                        auto filters_copy = filters;
 
-                    uinteger sz { 0 };
-                    if ( filters_copy.empty() ) { sz = data.size(); }
-                    else {
-                        sz =
-                            std::accumulate(
-                                filters_copy.cbegin(), filters_copy.cend(),
-                                static_cast<uinteger>( 0 ),
-                                []( uinteger lhs, const range_t & pair )
-                                { return lhs + (pair.second - pair.first); }
-                            );
-                    }
-
-                    // Calculate num of points per grouping.
-                    // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
-                    const uinteger n_points =
-                        MAX_ROWS < _n_points || _n_points == 0
-                            ? MAX_ROWS
-                            : _n_points;
-
-                    tmp.reserve(n_points);
-
-                    const uinteger n_group { sz / n_points };
-                    const uinteger overflow { sz % n_points };
-
-                    if ( filters_copy.empty() ) {
-                        filters_copy = { { 0, data.size() }};
-                    }
-
-                    const auto valid_data_pipeline =
-                        std::views::transform([](const auto& pair){ return std::views::iota(pair.first, pair.second); }) |
-                        std::views::join |
-                        std::views::transform([&](const auto& idx){ return data[idx]; });
-
-                    uinteger buf_sz{ 0 }, count{ 0 };
-                    auto const buf = new R[n_group + 1];
-
-                    // Perform averaging in points
-                    for ( const auto& v_data : filters_copy | valid_data_pipeline ) {
-                        // Points up to n_points - overflow are as expected.
-                        if ( count < n_points - overflow ) {
-                            if ( buf_sz < n_group - 1 ) {
-                                buf[buf_sz++] = v_data;
-                            }
-                            else {
-                                buf[buf_sz++] = v_data;
-                                const auto avg_group = std::vector<R>{buf, buf + buf_sz + 1};
-                                tmp.emplace_back(static_cast<R>(mean(avg_group)));
-                                buf_sz = 0;
-                            }
-                        }
-                        // Add 1 extra point per group to prevent overflow
-                        // and get exactly n_points at the end.
+                        uinteger sz { 0 };
+                        if ( filters_copy.empty() ) { sz = data.size(); }
                         else {
-                            if ( buf_sz < n_group ) {
-                                buf[buf_sz++] = v_data;
+                            sz =
+                                std::accumulate(
+                                    filters_copy.cbegin(), filters_copy.cend(),
+                                    static_cast<uinteger>( 0 ),
+                                    []( uinteger lhs, const range_t & pair )
+                                    { return lhs + (pair.second - pair.first); }
+                                );
+                        }
+
+                        // Calculate num of points per grouping.
+                        // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
+                        const uinteger n_points =
+                            MAX_ROWS < _n_points || _n_points == 0
+                                ? MAX_ROWS
+                                : _n_points;
+
+                        tmp.reserve(n_points);
+
+                        const uinteger n_group { sz / n_points };
+                        const uinteger overflow { sz % n_points };
+
+                        if ( filters_copy.empty() ) {
+                            filters_copy = { { 0, data.size() }};
+                        }
+
+                        const auto valid_data_pipeline =
+                            std::views::transform([](const auto& pair){ return std::views::iota(pair.first, pair.second); }) |
+                            std::views::join |
+                            std::views::transform([&](const auto& idx){ return data[idx]; });
+
+                        uinteger buf_sz{ 0 }, count{ 0 };
+                        auto const buf = new R[n_group + 1];
+
+                        // Perform averaging in points
+                        for ( const auto& v_data : filters_copy | valid_data_pipeline ) {
+                            // Points up to n_points - overflow are as expected.
+                            if ( count < n_points - overflow ) {
+                                if ( buf_sz < n_group - 1 ) {
+                                    buf[buf_sz++] = v_data;
+                                }
+                                else {
+                                    buf[buf_sz++] = v_data;
+                                    const auto avg_group = std::vector<R>{buf, buf + buf_sz};
+                                    tmp.emplace_back(static_cast<R>(avg_func(avg_group, buf, buf_sz, {})));
+                                    buf_sz = 0;
+                                }
                             }
+                            // Add 1 extra point per group to prevent overflow
+                            // and get exactly n_points at the end.
                             else {
-                                buf[buf_sz++] = v_data;
-                                const auto avg_group = std::vector<R>{buf, buf + buf_sz + 1};
-                                tmp.emplace_back(static_cast<R>(mean(avg_group)));
-                                buf_sz = 0;
+                                if ( buf_sz < n_group ) {
+                                    buf[buf_sz++] = v_data;
+                                }
+                                else {
+                                    buf[buf_sz++] = v_data;
+                                    const auto avg_group = std::vector<R>{buf, buf + buf_sz + 1};
+                                    tmp.emplace_back( static_cast<R>(avg_func(avg_group, buf, buf_sz + 1, {})) );
+                                    buf_sz = 0;
+                                }
                             }
                         }
-                    }
 
-                    delete[] buf;
+                        delete[] buf;
 
-                    reduced_storage = std::move(tmp);
-                };
+                        reduced_storage = std::move(tmp);
+                    };
 
                 uinteger sz { 0 };
                 if ( filters_copy.empty() ) {
@@ -1092,7 +968,8 @@ namespace burn_in_data_report
                     avg(int_data_.at(_key),
                         i_reduced,
                         filters_copy,
-                        n_points);
+                        n_points,
+                        avg_func_map<integer>);
 
                     std_deviations.insert(std_deviations.end(),
                                           n_points,
@@ -1106,7 +983,8 @@ namespace burn_in_data_report
                     avg(double_data_.at(_key),
                         d_reduced,
                         filters_copy,
-                        n_points);
+                        n_points,
+                        avg_func_map<double>);
 
                     std_deviations.insert(std_deviations.end(),
                                           n_points,
@@ -1163,6 +1041,9 @@ namespace burn_in_data_report
 
                 write_log("Done.");
             }
+
+            filters_ = filters_copy;
+
             return true;
         }
         catch ( const std::exception& err ) {

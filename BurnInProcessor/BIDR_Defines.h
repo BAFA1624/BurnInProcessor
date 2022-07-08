@@ -86,6 +86,7 @@ clear_log() {
                      std::ios_base::out | std::ios_base::trunc );
     log_file.close();
 }
+
 inline void WINAPI
 write_log( const std::string_view str ) {
     std::fstream log_file( log_path,
@@ -243,6 +244,7 @@ namespace burn_in_data_report
     };
 
 
+/*
     static double
     median( const std::vector<integer>& _v ) {
         if ( _v.empty() )
@@ -322,9 +324,11 @@ namespace burn_in_data_report
 
         return med;
     }
+*/
 
+    template <ArithmeticType T>
     static double
-    median( const std::vector<integer>&  _data,
+    median( const std::vector<T>&  _data,
             const uinteger& _first,
             const uinteger& _end,
             const std::vector<double>& stdevs) {
@@ -338,7 +342,7 @@ namespace burn_in_data_report
                          tmp.begin() + _end);
         double med = tmp[n];
 
-        if ( !((_end - _first + 1) & 1) ) {
+        if ( !(_end - _first + 1 & 1) ) {
             const auto max_it =
                 std::max_element(tmp.begin() + _first, tmp.begin() + _first + n);
             med = (*max_it + med) / 2.0;
@@ -346,6 +350,8 @@ namespace burn_in_data_report
 
         return med;
     }
+
+    /*
     static double
     median( const std::vector<double>&  _data,
             const uinteger& _first,
@@ -368,7 +374,7 @@ namespace burn_in_data_report
         }
 
         return med;
-    }
+    }*/
 
     template <typename T>
     const std::function<void( const T& )>
@@ -388,6 +394,7 @@ namespace burn_in_data_report
         std::cout << std::endl;
     }
 
+/*
     static double
     mean( const std::vector<integer>& _v ) {
         integer sum = std::accumulate(_v.cbegin(), _v.cend(), static_cast<integer>( 0 ));
@@ -466,9 +473,11 @@ namespace burn_in_data_report
                    ?  sum / static_cast<double>( _end - _start )
                    : 0.0;
     }
+*/
 
+    template <ArithmeticType T>
     static double
-    mean( const std::vector<integer>& _data, const uinteger&           _start,
+    mean( const std::vector<T>& _data, const uinteger&           _start,
           const uinteger&             _end, const std::vector<double>& _stdevs ) {
         double result { 0. };
         if ( _stdevs.empty() )
@@ -484,6 +493,8 @@ namespace burn_in_data_report
                    ? sum_weights_means / sum_weights
                    : 0.;
     }
+
+    /*
     static double
     mean( const std::vector<double>& _data, const uinteger& _start,
           const uinteger& _end, const std::vector<double>& _stdevs ) {
@@ -500,9 +511,9 @@ namespace burn_in_data_report
         return (_end - _start > 0)
                    ? sum_weights_means / sum_weights
                    : 0.;
-    }
+    }*/
 
-
+/*
     static double
     mean_debug( const std::vector<integer>& _v ) {
         std::cout << "mean_debug: _v.size() = " << _v.size() << std::endl;
@@ -629,6 +640,7 @@ namespace burn_in_data_report
         std::cout << "            result = " << sum_weights_means / sum_weights << std::endl;
         return sum_weights_means / sum_weights;
     }
+*/
 
     static range_t
     stable_period_convert( const uinteger _start, const uinteger _last ) {
@@ -646,6 +658,7 @@ namespace burn_in_data_report
         }
     }
 
+/*
     static range_t
     stable_period_convert_debug( const uinteger _start, const uinteger _last ) {
         std::cout << "stable_period_convert: _start = " << _start
@@ -665,7 +678,9 @@ namespace burn_in_data_report
                    ? result
                    : fallback_result;
     }
+*/
 
+/*
     static double
     stdev( const std::vector<integer>& _v, const double& _mean,
            const int& _ddof = 0 ) {
@@ -712,9 +727,9 @@ namespace burn_in_data_report
         sum /= (_last - _first) - _ddof; // sum / ((size) - ddof)
         return sqrt(sum);
     }
-
+    template <ArithmeticType T>
     static double
-    stdev( const std::vector<integer>& _data, const uinteger& _start,
+    stdev( const std::vector<T>& _data, const uinteger& _start,
            const uinteger& _end, const double& _mean,
            const int& _ddof = 0 ) {
         if ( _start > _end || _end >= _data.size() ) {
@@ -731,8 +746,8 @@ namespace burn_in_data_report
         }
         sum /= (_end - _start) - _ddof;
         return sqrt(sum);
-    }
-    static double
+    }*/
+/*    static double
     stdev( const std::vector<double>& _data, const uinteger& _start,
            const uinteger& _end, const double& _mean,
            const int& _ddof = 0 ) {
@@ -790,16 +805,26 @@ namespace burn_in_data_report
         double _mean = mean(_data, _first, _last);
         return stdev(_data, _first, _last, _mean, _ddof);
     }
+*/
 
+    template <ArithmeticType T>
     static double
-    stdev( const std::vector<integer>&      _data, const uinteger& _first,
+    stdev( const std::vector<T>&      _data, const uinteger& _first,
            const uinteger&            _last, const double&   _weighted_mean,
            const std::vector<double>& _stdevs, const int&    _ddof = 0 ) {
         if ( _stdevs.empty() ) {
-            return stdev(_data, _first, _last, _weighted_mean, _ddof);
+            double sum = 0;
+            for ( auto i = _data.begin() + _first;
+                  i != _data.begin() + _last; ++i ) {
+                sum += (*i - _weighted_mean) * (*i - _weighted_mean);
+            }
+            sum /= (_last - _first) - _ddof;
+            return sqrt(sum);
         }
 
-        assert(_data.size() == _stdevs.size());
+        if ( _data.size() != _stdevs.size() ) {
+            throw std::runtime_error("<stdev> Size mismatch between data & standard deviations provided.");
+        }
 
         uinteger non_zero_weights { 0 };
         double   sum_weights { 0. };
@@ -817,6 +842,8 @@ namespace burn_in_data_report
         return sqrt(sum_weights_values /
                      (static_cast<double>(non_zero_weights - 1) * sum_weights / static_cast<double>(non_zero_weights)));
     }
+
+    /*
     static double
     stdev( const std::vector<double>&      _data, const uinteger& _first,
            const uinteger&            _last, const double&   _weighted_mean,
@@ -842,17 +869,19 @@ namespace burn_in_data_report
 
         return sqrt(sum_weights_values /
                      (static_cast<double>(non_zero_weights - 1) * sum_weights / static_cast<double>(non_zero_weights)));
-    }
+    }*/
 
+    template <ArithmeticType T>
     static double
-    stable_mean( const std::vector<integer>& data,
+    stable_mean( const std::vector<T>& data,
                  const uinteger& first,
                  const uinteger& last,
                  const std::vector<double>& std_deviations ) {
         auto [n_first, n_last] =
             stable_period_convert( first, last );
-        return mean( data, n_first, n_last, std_deviations );
+        return mean<T>( data, n_first, n_last, std_deviations );
     }
+    /*
     static double
     stable_mean( const std::vector<double>& data,
                  const uinteger& first,
@@ -861,17 +890,19 @@ namespace burn_in_data_report
         auto [n_first, n_last] =
             stable_period_convert( first, last );
         return mean( data, n_first, n_last, std_deviations );
-    }
+    }*/
 
+    template <ArithmeticType T>
     static double
-    stable_median( const std::vector<integer>& data,
+    stable_median( const std::vector<T>& data,
                    const uinteger& first,
                    const uinteger& last,
                    const std::vector<double>& stdevs ) {
         const auto [n_first, n_last] =
             stable_period_convert( first, last );
-        return median( data, first, last );
+        return median<T>( data, first, last, stdevs );
     }
+ /*
     static double
     stable_median( const std::vector<double>& data,
                    const uinteger& first,
@@ -879,11 +910,13 @@ namespace burn_in_data_report
                    const std::vector<double>& stdevs ) {
         const auto [n_first, n_last] =
             stable_period_convert( first, last );
-        return median( data, first, last );
+        return median( data, first, last, stdevs );
     }
+*/
 
+    template <ArithmeticType T>
     static double
-    stable_stdev( const std::vector<integer>& data,
+    stable_stdev( const std::vector<T>& data,
                   const uinteger& first,
                   const uinteger& last,
                   const double& mean,
@@ -891,8 +924,10 @@ namespace burn_in_data_report
                   const int& ddof = 0 ) {
         const auto& [n_first, n_last] =
             stable_period_convert( first, last );
-        return stdev( data, n_first, n_last, mean, stdevs, ddof );
+        return stdev<T>( data, n_first, n_last, mean, stdevs, ddof );
     }
+
+    /*
     static double
     stable_stdev( const std::vector<double>& data,
                   const uinteger& first,
@@ -903,7 +938,7 @@ namespace burn_in_data_report
         const auto& [n_first, n_last] =
             stable_period_convert( first, last );
         return stdev( data, n_first, n_last, mean, stdevs, ddof );
-    }
+    }*/
 
     static std::pair<std::vector<double>, std::vector<double>>
     cycle_average( const std::vector<integer>& _data,
@@ -974,6 +1009,28 @@ namespace burn_in_data_report
                     return { averages, tmp_std_deviations };
     }
 
+    enum class avg_type
+    {
+        stable_mean,
+        overall_mean,
+        stable_median,
+        overall_median
+    };
+
+    template <ArithmeticType T>
+    using a_func = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const std::vector<double>&)>;
+    template <ArithmeticType T>
+    using std_func = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const double&, const std::vector<double>&, const int&)>;
+    template <ArithmeticType T>
+    using func_map = std::map<avg_type, std::pair<a_func<T>, std_func<T>>>;
+
+    template <ArithmeticType T>
+    const func_map<T> avg_func_map {
+        {avg_type::stable_mean, std::pair<a_func<T>, std_func<T>>{stable_mean<T>, stable_stdev<T>}},
+        {avg_type::overall_mean, std::pair<a_func<T>, std_func<T>>{mean<T>, stdev<T>}},
+        {avg_type::stable_median, std::pair<a_func<T>, std_func<T>>{stable_median<T>, stable_stdev<T>}},
+        {avg_type::overall_median, std::pair<a_func<T>, std_func<T>>{median<T>, stdev<T>}}
+    };
 
     template <typename T>
     static bool
@@ -1107,7 +1164,7 @@ namespace burn_in_data_report
     template <typename T, typename TIter = decltype(std::begin(std::declval<T>())),
               typename = decltype(std::end(std::declval<T>()))>
     constexpr auto
-    enumerate( T&& _iterable ) {
+    enumerate( const T&& _iterable ) {
         struct iterator
         {
             size_t i;
@@ -1121,6 +1178,34 @@ namespace burn_in_data_report
             }
 
             auto operator*() const { return std::tie(i, *iter); }
+        };
+        struct iterable_wrapper
+        {
+            T iterable;
+
+            auto begin() { return iterator { 0, std::begin(iterable) }; }
+
+            auto end() { return iterator { 0, std::end(iterable) }; }
+        };
+        return iterable_wrapper { std::forward<T>(_iterable) };
+    }
+    template <typename T, typename TIter = decltype(std::begin(std::declval<T>())),
+              typename = decltype(std::end(std::declval<T>()))>
+    constexpr auto
+    enumerate( T&& _iterable ) {
+        struct iterator
+        {
+            size_t i;
+            TIter  iter;
+
+            bool operator!=( const iterator& other ) const { return iter != other.iter; }
+
+            void operator++() {
+                ++i;
+                ++iter;
+            }
+
+            auto operator*() { return std::tie(i, *iter); }
         };
         struct iterable_wrapper
         {
@@ -1230,17 +1315,32 @@ namespace burn_in_data_report
         return result;
     }
 
+    inline std::string& operator<<( std::string& a, const std::string_view b ) { return a += b; }
+    inline std::string operator+( const std::string& a, const std::string_view b ) {
+        std::string copy{ a };
+        return copy += b;
+    }
+
     inline std::string
-    concatenate( const std::vector<std::string>::iterator start,
-                 const std::vector<std::string>::iterator end,
-                 const std::string& delimiter) {
+    concatenate( const std::input_iterator auto start,
+                 const std::input_iterator auto end,
+                 const std::string_view delimiter) {
         assert( start <= end );
-        std::string result;
-        for ( auto iter{ start }; iter != end; ++iter ) {
-            result.append( *iter + delimiter );
-        }
-        result.pop_back();
+        if ( start == end ) { return ""; }
+
+        auto result =
+            std::accumulate(start, end, std::string{""},
+                [&delimiter]( const auto lhs, const auto& rhs){ return lhs + rhs + delimiter; });
+
+        for ( uinteger i{0}; i < delimiter.size(); ++i ) { result.pop_back(); }
+
         return result;
+    }
+
+    inline std::string
+    concatenate( const std::vector<std::string>& v,
+                 const std::string_view delimiter ) {
+        return concatenate(v.cbegin(), v.cend(), delimiter);
     }
 
     inline std::wstring
