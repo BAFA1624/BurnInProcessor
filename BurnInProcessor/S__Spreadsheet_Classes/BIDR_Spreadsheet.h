@@ -617,6 +617,7 @@ namespace burn_in_data_report
                     = [&_a_type]<typename K>
                 ( const std::vector<K>& data,
                   std::vector<K>& reduced_storage,
+                  std::vector<double>& stdevs,
                   const indices_t& ranges,
                   const uinteger& n_group,
                   const func_map<K>& a_func_map)
@@ -631,68 +632,36 @@ namespace burn_in_data_report
                         const auto& [avg_func, std_func] =
                             a_func_map.at(_a_type);
 
-                        auto ranges_copy = ranges;
-
-                        // Initial size of data & copy into temporary
-                        uinteger sz{ data.size() };
-                        auto tmp = data;
-
                         /*
                         * Calculate no. rows at end of process.
                         * Overflow handles remaining points if no_rows % n_group_ > 0
                         * by adding an extra point to the last x rows where x is the remainder
                         */
-                        const uinteger total_rows { tmp.size() / n_group };
-                        const uinteger overflow{ tmp.size() % n_group };
-                        reduced_storage.reserve(total_rows + (overflow ? 1 : 0));
 
                         // Perform averaging:
 
-                        const auto valid_data_pipeline =
-                            std::views::transform(
-                                [](const auto& pair)
-                                { return std::views::iota(pair.first, pair.second); })
-                            | std::views::join
-                            | std::views::transform([&](const auto& idx){ return data[idx]; });
+                        const uinteger n_points{ data.size() / n_group };
+                        const uinteger overflow{ data.size() % n_group ? 1 : 0 };
 
-                        if ( ranges_copy.empty() ) {
-                            ranges_copy = { {0, data.size() } };
-                        }
+                        reduced_storage.clear();
+                        reduced_storage.reserve(n_points + overflow);
 
-                        auto const buf = new K[n_group];
-                        uinteger buf_sz{ 0 };
-                        for ( const auto& v_data : ranges_copy | valid_data_pipeline ) {
-                            if ( buf_sz < n_group - 1 ) {
-                                buf[buf_sz++] = v_data;
-                            }
-                            else {
-                                buf[buf_sz++] = v_data;
-                                tmp.emplace_back(
-                                    static_cast<K>(
-                                        avg_func(
-                                            std::vector<K>(buf, buf + buf_sz),
-                                            0, buf_sz, {}
-                                        )
-                                    )
-                                );
-                                buf_sz = 0;
-                            }
-                        }
-
-                        if ( buf_sz > 0 ) {
-                            tmp.emplace_back(
+                        for ( uinteger i{ 0 }; i < n_points; ++i ) {
+                            reduced_storage.emplace_back(
                                 static_cast<K>(
                                     avg_func(
-                                        std::vector<K>(buf, buf + buf_sz),
-                                        0, buf_sz, {}
+                                        data,
+                                        i * n_group, (i + 1) * n_group,
                                     )
                                 )
                             );
-                            buf_sz = 0;
+                            
                         }
 
-                        delete[] buf;
-
+                        if ( overflow ) {
+                            
+                        }
+                        
                         return true;
                     }
                     catch ( const std::exception& err ) {
