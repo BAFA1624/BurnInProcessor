@@ -722,6 +722,7 @@ namespace burn_in_data_report
                                 : 1;
 
                 const auto indices{
+
                 };
 
                 // Perform averaging for each column currently loaded
