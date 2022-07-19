@@ -799,18 +799,18 @@ namespace burn_in_data_report
 
                 _handle._data = tmp_data;
             }
+
+            return true;
         }
         catch ( const std::exception& err ) {
             write_err_log(err, "DLL: <file_data::encode_adjust_file>");
             _encoding = encoding_type::UNKNOWN;
             _handle.free();
 
-            if ( tmp_data )
-                delete[] tmp_data;
+            delete[] tmp_data;
 
             return false;
         }
-        return true;
     }
 
     // Scan & account for encoding
@@ -1132,10 +1132,11 @@ namespace burn_in_data_report
                     header_lims[i] = settings_[i].get_headermaxlim();
 
                     // Launch async process executing line_check function
-                    futures[i] = std::async(
-                                            static_cast<bool (*)( const std::vector<std::string_view>&,
-                                                                  const std::regex&, uinteger& )>( line_check ),
-                                            std::cref(file_lines_[i]), pattern, std::ref(header_lims[i]));
+                    futures[i] =
+                        std::async(
+                            static_cast<bool(*)(const std::vector<std::string_view>&, const std::regex&, uinteger&)>(line_check),
+                            std::cref(file_lines_[i]), pattern, std::ref(header_lims[i])
+                        );
                 }
             }
 
@@ -1198,12 +1199,27 @@ namespace burn_in_data_report
                 if ( std::regex_search(path_str, match, start_pattern) ) {
                     const std::chrono::sys_time<nano> start_time =
                         time_format(match.str(), std::string { params.at("time_pattern") },
-                                    std::chrono::system_clock::time_point {});
+                                    std::chrono::system_clock::time_point{});
                     settings.set_start_time(start_time);
                 }
             }
+            else if ( method == "InData" ) {
+                const std::regex start_pattern = params.at("re_pattern");
+                const std::string delim{ settings.get_config().at("delim").get<std::string>() };
+
+                // Parse start time from first line of data
+                const auto& data{ lines[settings.get_header_lim()] };
+                const auto split_data{ split_str(data, delim) };
+                const auto start_time_str{ trim(split_data[params.at("col_index").get<uinteger>()]) };
+                settings.set_start_time(
+                    time_format(start_time_str, params.at("time_pattern").get<std::string>(),
+                        std::chrono::system_clock::time_point{}
+                    )
+                );
+            }
             else {
                 // Some sort of failure
+                throw std::runtime_error("<time_stamp_scan> Unknown test start time scanning method.");
             }
 #ifdef DEBUG
             write_log(std::format("Finished, start time: {}.\n", settings.get_start_time()));
@@ -1234,9 +1250,7 @@ namespace burn_in_data_report
             else if ( method == "Automatic" ) {
                 if ( !is_in(params.at("title").get<std::string>(),
                             settings.get_config().at("titles").get<std::vector<std::string>>()) ) {
-                    std::runtime_error
-                        err("Invalid title parsed in configuration file to automatically detect measurement interval.");
-                    throw err;
+                    throw std::runtime_error("Invalid title parsed in configuration file to automatically detect measurement interval.");
                 }
                 // Data hasn't been read in yet, interval is detected in parsing step
             }

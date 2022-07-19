@@ -478,10 +478,18 @@ namespace burn_in_data_report
     template <ArithmeticType T>
     static double
     mean( const std::vector<T>& _data, const uinteger&           _start,
-          const uinteger&             _end, const std::vector<double>& _stdevs ) {
-        double result { 0. };
-        if ( _stdevs.empty() )
-            return mean(_data, _start, _end);
+          const uinteger&       _end, const std::vector<double>& _stdevs ) {
+        if ( _start > _end || _end > _data.size() ) {
+            write_err_log(
+                std::runtime_error("<mean> Invalid start/end parameters received.")
+            );
+            return std::numeric_limits<double>::signaling_NaN();
+        }
+        if ( _stdevs.empty() ) {
+            return std::accumulate(_data.cbegin() + _start, _data.cbegin() + _end,
+                               0.0, 
+                               [](const double lhs, const T& rhs){ return lhs + static_cast<double>(rhs); }) / _data.size();
+        }
         assert(_data.size() == _stdevs.size());
 
         const double sum_weights =
@@ -1480,6 +1488,33 @@ namespace burn_in_data_report
             return std::numeric_limits<T>::max();
         }
         return *std::min_element(data.begin(), data.end());
+    }
+
+    template <typename R, typename... T>
+    using gen_func = std::function<R(T...)>;
+
+    template <typename R, typename... Args>
+    R
+    type_switch(const gen_func<R, Args...>& f, const DataType& dtype, Args... args) {
+        R result;
+        switch ( dtype ) {
+        case DataType::INTEGER: {
+            result = f(args...);
+        }
+        case DataType::DOUBLE: {
+            result = f(args...);
+        }
+        case DataType::STRING: {
+            result = f(args...);
+        }
+        case DataType::NONE: {
+            throw
+                std::runtime_error(
+                    "<type_switch> DataType::NONE encountered."
+                );
+        }
+        }
+        return result;
     }
 
 } // namespace burn_in_data_report
