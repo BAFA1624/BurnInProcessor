@@ -486,9 +486,16 @@ namespace burn_in_data_report
             return std::numeric_limits<double>::signaling_NaN();
         }
         if ( _stdevs.empty() ) {
-            return std::accumulate(_data.cbegin() + _start, _data.cbegin() + _end,
-                               0.0, 
-                               [](const double lhs, const T& rhs){ return lhs + static_cast<double>(rhs); }) / _data.size();
+            const auto x =
+                static_cast<double>(
+                    std::accumulate(
+                        _data.cbegin() + _start, _data.cbegin() + _end,
+                        static_cast<T>(0),
+                        [](const T lhs, const T& rhs)
+                        { return lhs + rhs; }
+                    )
+                ) / (_end - _start);
+            return x;
         }
         assert(_data.size() == _stdevs.size());
 

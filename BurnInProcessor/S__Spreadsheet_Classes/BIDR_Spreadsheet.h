@@ -483,8 +483,8 @@ namespace burn_in_data_report
             std::vector<integer> i_reduced;
             std::vector<double> d_reduced;
             std::vector<std::string> s_reduced;
-            std::vector<double> std_deviations;
             const DataType type = type_map_.at(_key);
+            auto ranges_copy{ ranges_ };
 
             // get current no. rows. Will be updated as reductions applied
             uinteger no_rows { 0 };
@@ -532,17 +532,11 @@ namespace burn_in_data_report
                         std::vector<double> new_stdevs;
                         avgs.reserve(ranges_.size());
                         new_stdevs.reserve(ranges_.size());
-                        uinteger cnt{ 0 };
-                        for ( const auto& [first, last] : ranges_ ) {
-                            avgs.emplace_back(
-                                static_cast<T>(func(data, first, last, stdevs))
-                            );
-                            new_stdevs.emplace_back(
-                                s_func(data, first, last, avgs.back(), stdevs, 0)
-                            );
-                            cnt++;
+
+                        for ( const auto& [first, last] : ranges_copy ) {
+                            avgs.emplace_back(static_cast<T>(func(data, first, last, stdevs)));
+                            new_stdevs.emplace_back(s_func(data, first, last, avgs.back(), stdevs, 0));
                         }
-                        write_log(std::format("    {} ranges averaged.", cnt));
                         return { avgs, new_stdevs };
                     };
 
@@ -558,6 +552,7 @@ namespace burn_in_data_report
                         avg(double_data_.at(_key), d_errors_.at(_key), avg_func_map<double>);
                     double_data_.at(_key) = avgs;
                     d_errors_.at(_key) = std;
+                    write_log(std::format("double_data_[{}].size() = {}", _key, double_data_.at(_key).size()));
                 } break;
                 case DataType::STRING: {
                     /*
@@ -603,7 +598,7 @@ namespace burn_in_data_report
 
                 // Clear ranges_ now cycles have been
                 // avg'd into single data points
-                ranges_.clear();
+                ranges_copy.clear();
             }
 
             // Average by groups of n_group_ points
@@ -631,8 +626,10 @@ namespace burn_in_data_report
                         const auto& [avg_func, std_func] =
                             a_func_map.at(_a_type);
 
-                        const uinteger n_points{ data.size() / n_group };
-                        const uinteger overflow{ data.size() % n_group ? 1 : 0 };
+                        const uinteger n_points =
+                            data.size() / n_group;
+                        const uinteger overflow =
+                            data.size() % n_group ? 1 : 0;
 
                         reduced_storage.clear();
                         reduced_storage.reserve(n_points + overflow);
@@ -689,22 +686,6 @@ namespace burn_in_data_report
                     }
                 };
 
-                uinteger sz{ 0 };
-                switch ( type ) {
-                case DataType::INTEGER:
-                    sz = int_data_.at(_key).size();
-                    break;
-                case DataType::DOUBLE:
-                    sz = double_data_.at(_key).size();
-                    break;
-                case DataType::STRING:
-                    sz = string_data_.at(_key).size();
-                    break;
-                case DataType::NONE:
-                    break;
-                }
-
-                
                 // Perform averaging for each column currently loaded
                 switch ( type ) {
                 case DataType::INTEGER: {
@@ -728,7 +709,7 @@ namespace burn_in_data_report
                 case DataType::STRING: {
                     auto& data { string_data_.at(_key) };
 
-                    uinteger _no_rows { sz / _n_group }, offset { sz % _n_group };
+                    uinteger _no_rows { data.size() / _n_group}, offset{ data.size() % _n_group };
                     no_rows += offset == 0
                                 ? 0
                                 : 1;
@@ -746,18 +727,17 @@ namespace burn_in_data_report
                             };
                         s_reduced.emplace_back(concatenate(start, end, ","));
                     }
-                    std_deviations.insert(std_deviations.end(),
-                                          _no_rows + offset,
-                                          std::numeric_limits<double>::signaling_NaN());
+                    s_errors_.at(_key).insert(
+                        s_errors_.at(_key).end(),
+                        _no_rows + offset,
+                        std::numeric_limits<double>::signaling_NaN()
+                    );
 
                     string_data_[_key] = s_reduced;
-                    s_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::NONE: { break; }
                 }
-
-                std_deviations.clear();
 
                 write_log("Done.");
             }
@@ -844,34 +824,15 @@ namespace burn_in_data_report
 
                     };
 
-                uinteger sz { 0 };
-                switch ( type ) {
-                case DataType::INTEGER:
-                    sz = int_data_.at(_key).size();
-                    break;
-                case DataType::DOUBLE:
-                    sz = double_data_.at(_key).size();
-                    break;
-                case DataType::STRING:
-                    sz = string_data_.at(_key).size();
-                    break;
-                case DataType::NONE:
-                    throw std::runtime_error("DataType::NONE encountered.");
-                }
-
                 // Calculate num of points per grouping.
                 // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
-                const uinteger n_points =
-                    MAX_ROWS < _n_points || _n_points == 0
-                        ? MAX_ROWS
-                        : _n_points;
-                const uinteger n_group { sz / n_points }, overflow { sz % n_points };
+                
 
                 switch ( type ) {
                 case DataType::INTEGER: {
                     avg(int_data_.at(_key),
                         i_reduced, i_errors_.at(_key),
-                        n_points, avg_func_map<integer>);
+                        _n_points, avg_func_map<integer>);
 
                     int_data_[_key] = i_reduced;
                     break;
@@ -879,7 +840,7 @@ namespace burn_in_data_report
                 case DataType::DOUBLE: {
                     avg(double_data_.at( _key ),
                         d_reduced, d_errors_.at( _key ),
-                        n_points, avg_func_map<double>);
+                        _n_points, avg_func_map<double>);
 
                     double_data_[_key] = d_reduced;
                     break;
@@ -887,7 +848,14 @@ namespace burn_in_data_report
                 case DataType::STRING: {
                     auto& data = string_data_.at(_key);
 
+                    const uinteger n_points =
+                    MAX_ROWS < _n_points || _n_points == 0
+                        ? MAX_ROWS
+                        : _n_points;
+                    const uinteger n_group { data.size() / n_points}, overflow{ data.size() % n_points };
+
                     s_reduced.reserve(n_points);
+
                     for ( uinteger i { 0 }; i < n_points; ++i ) {
                         const auto start {
                                 std::next(data.begin(), static_cast<integer>( i ) * n_group)
@@ -901,13 +869,12 @@ namespace burn_in_data_report
                         s_reduced.emplace_back( concatenate(start, end, ",") );
                     }
 
-                    std_deviations.insert(
-                        std_deviations.end(), n_points,
+                    s_errors_.at(_key).insert(
+                        s_errors_.at(_key).end(), n_points,
                         std::numeric_limits<double>::signaling_NaN()
                      );
 
                     string_data_[_key] = s_reduced;
-                    s_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::NONE: { break; }
@@ -941,6 +908,8 @@ namespace burn_in_data_report
                               ? "Success."
                               : "Fail.");
             }
+
+            if ( result ) { ranges_.clear(); }
 
             result &= update_n_rows();
 
@@ -1582,7 +1551,6 @@ namespace burn_in_data_report
             n_rows_ = 0;
 
             for ( const auto& [key, type] : type_map_ ) {
-                write_log(std::format(" - {}: {}", key, type_string.at(type)));
                 switch ( type ) {
                 case DataType::INTEGER:
                     int_data_[key] = file_.get_i(key);

@@ -784,11 +784,7 @@ namespace burn_in_data_report
             _encoding = find_encoding_type(_handle);
 
             if ( _encoding != encoding_type::UNKNOWN ) {
-#ifdef DEBUG
-                print("- Encoding found: " + encoding_string.at(_encoding) +
-                      ", adjusting...",
-                      3);
-#endif
+                write_log("- Encoding found: " + encoding_string.at(_encoding) + ", adjusting..." );
                 const uinteger offset = encoding_bom.at(_encoding).size();
                 tmp_data = new char[access_checked(_handle._sz - offset)];
 
@@ -876,19 +872,28 @@ namespace burn_in_data_report
     // Also delimiters, etc.
     inline bool
     file_data::async_process_files() noexcept {
-        Timer t;
+        Timer t, t2;
         if ( !async_text_to_lines() ) { return false; }
+        write_log(std::format("     - text_to_lines completed in {} seconds.", t.elapsed()));
+        t.reset();
         // Scan for file style, e.g Starlabs .txt or normal .csv style.
         if ( !async_parse_file_type(config_loc_) ) { return false; }
+        write_log(std::format("     - parse file parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_header_halt_scan() ) { return false; }
+        write_log(std::format("     - header halt parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_time_stamp_scan() ) { return false; }
+        write_log(std::format("     - time stamp parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_column_title_scan() ) { return false; }
-        write_log(std::format("   - Header info parsed in {} seconds.", t.elapsed()));
+        write_log(std::format("     - column titles parsed in {} seconds.", t.elapsed()));
+        write_log(std::format("   - Header info parsed in {} seconds.", t2.elapsed()));
         t.reset();
         if ( !async_parse_data() ) { return false; }
         write_log(std::format("   - Data parsed in {} seconds.", t.elapsed()));
+        t2.reset();
         t.reset();
-        const Timer t2;
         if ( !async_trim_data() ) { return false; }
         write_log(std::format("     - Data trimmed in {} seconds.", t.elapsed()));
         if ( !async_combine_data() ) { return false; }
