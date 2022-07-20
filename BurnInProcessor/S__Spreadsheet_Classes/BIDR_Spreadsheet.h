@@ -618,7 +618,6 @@ namespace burn_in_data_report
                 ( const std::vector<K>& data,
                   std::vector<K>& reduced_storage,
                   std::vector<double>& stdevs,
-                  const indices_t& ranges,
                   const uinteger& n_group,
                   const func_map<K>& a_func_map)
                 -> bool {
@@ -632,19 +631,13 @@ namespace burn_in_data_report
                         const auto& [avg_func, std_func] =
                             a_func_map.at(_a_type);
 
-                        /*
-                        * Calculate no. rows at end of process.
-                        * Overflow handles remaining points if no_rows % n_group_ > 0
-                        * by adding an extra point to the last x rows where x is the remainder
-                        */
-
-                        // Perform averaging:
-
                         const uinteger n_points{ data.size() / n_group };
                         const uinteger overflow{ data.size() % n_group ? 1 : 0 };
 
                         reduced_storage.clear();
                         reduced_storage.reserve(n_points + overflow);
+                        std::vector<double> tmp_stdevs;
+                        tmp_stdevs.reserve( n_points + overflow );
 
                         for ( uinteger i{ 0 }; i < n_points; ++i ) {
                             reduced_storage.emplace_back(
@@ -652,15 +645,41 @@ namespace burn_in_data_report
                                     avg_func(
                                         data,
                                         i * n_group, (i + 1) * n_group,
+                                        stdevs
                                     )
                                 )
                             );
-                            
+                            tmp_stdevs.emplace_back(
+                                std_func(
+                                    data,
+                                    i * n_group, (i + 1) * n_group,
+                                    static_cast<double>(reduced_storage.back()),
+                                    stdevs, 0
+                                )
+                            );
                         }
 
                         if ( overflow ) {
-                            
+                            reduced_storage.emplace_back(
+                                static_cast<K>(
+                                    avg_func(
+                                        data,
+                                        n_points * n_group, (n_points * n_group) + (data.size() % n_group),
+                                        stdevs
+                                    )
+                                )
+                            );
+                            tmp_stdevs.emplace_back(
+                                std_func(
+                                    data,
+                                    n_points * n_group, (n_points * n_group) + (data.size() % n_group),
+                                    static_cast<double>(reduced_storage.back()),
+                                    stdevs, 0
+                                )
+                            );
                         }
+
+                        stdevs = std::move(tmp_stdevs);
                         
                         return true;
                     }
@@ -685,50 +704,34 @@ namespace burn_in_data_report
                     break;
                 }
 
-                uinteger _no_rows { sz / _n_group }, offset { sz % _n_group };
-                no_rows += offset == 0
-                                ? 0
-                                : 1;
-
-                const auto indices{
-
-                };
-
+                
                 // Perform averaging for each column currently loaded
                 switch ( type ) {
                 case DataType::INTEGER: {
-                    avg(int_data_.at(_key),
-                        i_reduced,
-                        ranges_,
-                        _n_group,
-                        avg_func_map<integer>);
-
-                    std_deviations.insert(std_deviations.end(),
-                                          _no_rows + offset,
-                                          std::numeric_limits<double>::signaling_NaN());
+                    avg(
+                        int_data_.at(_key),
+                        i_reduced, i_errors_.at(_key),
+                        _n_group, avg_func_map<integer>
+                    );
 
                     int_data_[_key] = i_reduced;
-                    i_errors_[_key] = std::move(std_deviations);
                     break;
                 }
                 case DataType::DOUBLE: {
-                    avg(double_data_.at(_key),
-                        d_reduced,
-                        ranges_,
-                        _n_group,
-                        avg_func_map<double>);
-
-                    
-                    std_deviations.insert(std_deviations.end(),
-                                          _no_rows + offset,
-                                          std::numeric_limits<double>::signaling_NaN());
+                    avg( double_data_.at( _key ),
+                         d_reduced, d_errors_.at( _key ),
+                        _n_group, avg_func_map<double>);
 
                     double_data_[_key] = d_reduced;
-                    d_errors_[_key] = std::move(std_deviations);
                     break;
                 }
                 case DataType::STRING: {
                     auto& data { string_data_.at(_key) };
+
+                    uinteger _no_rows { sz / _n_group }, offset { sz % _n_group };
+                    no_rows += offset == 0
+                                ? 0
+                                : 1;
 
                     s_reduced.reserve(_no_rows);
                     for ( uinteger i { 0 }; i < _no_rows; ++i ) {
@@ -772,73 +775,73 @@ namespace burn_in_data_report
                 auto avg =
                     [&_a_type]<ArithmeticType R>
                     ( const std::vector<R>& data, std::vector<R>& reduced_storage,
-                    const indices_t& ranges, const uinteger& _n_points,
+                    std::vector<double>& stdevs, const uinteger& _n_points,
                     const func_map<R>& a_func_map) -> void {
                         // Storage for tmp data
-                        std::vector<R> tmp;
                         const auto& [avg_func, std_func] = a_func_map.at(_a_type);
-
-                        auto ranges_copy = ranges;
-
-                        const uinteger sz { data.size() };
 
                         // Calculate num of points per grouping.
                         // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
-                        const uinteger n_points =
-                            MAX_ROWS < _n_points || _n_points == 0
-                                ? MAX_ROWS
-                                : _n_points;
+                        const auto n_points_arr = std::vector<uinteger>{ _n_points, MAX_ROWS, data.size() };
+                        const uinteger n_points = *std::min_element( n_points_arr.cbegin(), n_points_arr.cend() );
 
-                        tmp.reserve(n_points);
+                        reduced_storage.clear();
+                        reduced_storage.reserve( n_points );
 
-                        const uinteger n_group { sz / n_points };
-                        const uinteger overflow { sz % n_points };
+                        std::vector<double> tmp_stdevs;
+                        tmp_stdevs.reserve( n_points );
 
-                        if ( ranges_copy.empty() ) {
-                            ranges_copy = { { 0, data.size() } };
+                        const uinteger n_group { data.size() / n_points};
+                        const uinteger overflow { data.size() % n_points};
+
+                        for ( uinteger i{ 0 }; i < n_points - overflow; ++i ) {
+                            reduced_storage.emplace_back(
+                                static_cast<R>(
+                                    avg_func(
+                                        data,
+                                        i * n_group, (i + 1) * n_group,
+                                        stdevs
+                                    )
+                                )
+                            );
+                            tmp_stdevs.emplace_back(
+                                std_func(
+                                    data,
+                                    i * n_group, (i + 1) * n_group,
+                                    static_cast<double>(reduced_storage.back()),
+                                    stdevs, 0
+                                )
+                            );
                         }
 
-                        const auto valid_data_pipeline =
-                            std::views::transform([](const auto& pair){ return std::views::iota(pair.first, pair.second); }) |
-                            std::views::join |
-                            std::views::transform([&](const auto& idx){ return data[idx]; });
-
-                        uinteger buf_sz{ 0 }, count{ 0 };
-                        auto const buf = new R[n_group + 1];
-
-                        // Perform averaging in points
-                        for ( const auto& v_data : ranges_copy | valid_data_pipeline ) {
-                            // Points up to n_points - overflow are as expected.
-                            if ( count < n_points - overflow ) {
-                                if ( buf_sz < n_group - 1 ) {
-                                    buf[buf_sz++] = v_data;
-                                }
-                                else {
-                                    buf[buf_sz++] = v_data;
-                                    const auto avg_group = std::vector<R>{ buf, buf + buf_sz };
-                                    tmp.emplace_back(static_cast<R>(avg_func(avg_group, 0, buf_sz, {})));
-                                    buf_sz = 0;
-                                }
+                        // Add overflow to last few points
+                        uinteger count{ 0 }, start_pos{ (n_points - overflow) * n_group }, end_pos{ start_pos };
+                        for ( uinteger i{ (n_points - overflow) * n_group }; i < data.size(); ++i ) {
+                            if ( ++count == n_group + 1 ) {
+                                reduced_storage.emplace_back(
+                                    static_cast<R>(
+                                        avg_func(
+                                            data,
+                                            start_pos, i + 1,
+                                            stdevs
+                                        )
+                                    )
+                                );
+                                tmp_stdevs.emplace_back(
+                                    std_func(
+                                        data,
+                                        start_pos, i + 1,
+                                        static_cast<double>(reduced_storage.back()),
+                                        stdevs, 0
+                                    )
+                                );
+                                start_pos = i + 1;
+                                count = 0;
                             }
-                            // Add 1 extra point per group to prevent overflow
-                            // and get exactly n_points at the end.
-                            else {
-                                if ( buf_sz < n_group ) {
-                                    buf[buf_sz++] = v_data;
-                                }
-                                else {
-                                    buf[buf_sz++] = v_data;
-                                    const auto avg_group = std::vector<R>{ buf, buf + buf_sz + 1 };
-                                    tmp.emplace_back( static_cast<R>(avg_func(avg_group, 0, buf_sz + 1, {})) );
-                                    buf_sz = 0;
-                                }
-                            }
-                            count++;
                         }
 
-                        delete[] buf;
+                        stdevs = std::move( tmp_stdevs );
 
-                        reduced_storage = std::move(tmp);
                     };
 
                 uinteger sz { 0 };
@@ -867,37 +870,22 @@ namespace burn_in_data_report
                 switch ( type ) {
                 case DataType::INTEGER: {
                     avg(int_data_.at(_key),
-                        i_reduced,
-                        ranges_,
-                        n_points,
-                        avg_func_map<integer>);
-
-                    std_deviations.insert(std_deviations.end(),
-                                          n_points,
-                                          std::numeric_limits<double>::signaling_NaN());
+                        i_reduced, i_errors_.at(_key),
+                        n_points, avg_func_map<integer>);
 
                     int_data_[_key] = i_reduced;
-                    i_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::DOUBLE: {
-                    avg(double_data_.at(_key),
-                        d_reduced,
-                        ranges_,
-                        n_points,
-                        avg_func_map<double>);
-
-                    std_deviations.insert(std_deviations.end(),
-                                          n_points,
-                                          std::numeric_limits<double>::signaling_NaN());
+                    avg(double_data_.at( _key ),
+                        d_reduced, d_errors_.at( _key ),
+                        n_points, avg_func_map<double>);
 
                     double_data_[_key] = d_reduced;
-                    d_errors_[_key] = std_deviations;
                     break;
                 }
                 case DataType::STRING: {
                     auto& data = string_data_.at(_key);
-                    uinteger sz{ data.size() };
 
                     s_reduced.reserve(n_points);
                     for ( uinteger i { 0 }; i < n_points; ++i ) {
@@ -910,9 +898,7 @@ namespace burn_in_data_report
                                               ? static_cast<integer>( i ) * (static_cast<integer>( n_group ) + 1)
                                               : static_cast<integer>( i ) * (static_cast<integer>( n_group ) + 1) + 1)
                             };
-                        s_reduced.emplace_back(
-                            concatenate(start, end, ",")
-                        );
+                        s_reduced.emplace_back( concatenate(start, end, ",") );
                     }
 
                     std_deviations.insert(

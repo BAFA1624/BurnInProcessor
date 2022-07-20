@@ -1057,19 +1057,16 @@ namespace burn_in_data_report
     }
 
     template <typename T>
-    static int
+    static uinteger
     is_in_count( const T& _val, const std::vector<T>& _arr ) {
         try {
-            int count;
-            count = std::accumulate(
-                                    _arr.cbegin(), _arr.cend(),
-                                    0,
-                                    [&_val]( int& lhs, const T& rhs ) {
-                                        return lhs += ((_val == rhs)
-                                                           ? 1
-                                                           : 0);
-                                    }
-                                   );
+            const auto count =
+                std::accumulate(
+                    _arr.cbegin(), _arr.cend(),
+                    static_cast<uinteger>(0),
+                    [&_val]( int& lhs, const T& rhs )
+                    { return lhs += _val == rhs ? 1 : 0; }
+                );
             return count;
         }
         catch ( const std::exception& err ) {
