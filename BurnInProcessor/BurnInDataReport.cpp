@@ -37,11 +37,6 @@ load_files( _In_ const LPSAFEARRAY* ppsa,
                                   ? true
                                   : false);
 
-        std::string msg("Available columns:");
-        for ( const auto& col : spreadsheet.get_available_cols() ) { msg += std::format("\n - {}", col); }
-        msg += "\nFiles loaded.";
-        write_log(msg);
-
         return TRUE;
     }
     catch ( const std::exception& err ) {

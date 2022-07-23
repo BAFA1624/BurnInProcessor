@@ -972,35 +972,38 @@ namespace burn_in_data_report
     }
 
     static bool
-    verify_configs( const std::map<std::string, nlohmann::json>& _configs,
+    verify_configs( const std::unordered_map<std::string, nlohmann::json>& _configs,
                     const std::vector<std::string_view>& lines,
                     const uinteger& _header_lim,
                     nlohmann::json& _result ) {
         try {
             for ( auto& [name, config] : _configs ) {
-#ifdef DEBUG
                 write_log(std::format("\t- Checking: {}", name));
-#endif
                 std::string pattern_string;
-                try { pattern_string = config.at("file_identifier").get<std::string>(); }
+                try {
+                    pattern_string = config.at("file_identifier").get<std::string>();
+                }
                 catch ( [[maybe_unused]] const std::exception& err ) {
                     write_log(std::format("DLL: <verify_configs> Invalid config detected -> {}", name));
                     continue;
                 }
 
-                if ( uinteger x { _header_lim }; line_check(lines, pattern_string, x) ) {
-#ifdef DEBUG
-                    print("Success.", 4);
-#endif
-                    write_log(std::format("     - Config matched: {}", name));
-                    _result = config;
-                    return true;
+                try {
+                    if ( uinteger x{ _header_lim }; line_check(lines, pattern_string, x) ) {
+                        write_log(std::format("\t\t- Config matched: {}", name));
+                        _result = config;
+                        return true;
+                    }
+                    else {
+                        write_log(std::format("\t\t- No match ({})", name));
+                    }
+                }
+                catch ( const std::exception& err ) {
+                    write_log(std::format("Error parsing {}: {}", name, err.what()));
                 }
             }
 
-#ifdef DEBUG
-            print("Failure.", 4);
-#endif
+            write_log("No matching config found.");
             _result = nlohmann::json::parse("{}");
             return false;
         }
@@ -1033,7 +1036,9 @@ namespace burn_in_data_report
                     else if ( const auto extension { filename.substr(f_extension_pos, filename.length()) };
                         extension == ".json" ) {
                         nlohmann::json config;
-                        if ( parse_json(entry, config) ) { _storage.push_back(config); }
+                        if ( parse_json(entry, config) ) {
+                            _storage.push_back(config);
+                        }
                     }
                 }
 
@@ -1059,9 +1064,10 @@ namespace burn_in_data_report
     inline bool
     file_data::async_parse_file_type( const std::filesystem::path& _configPath ) {
         try {
-            std::map<std::string, nlohmann::json> potential_configs {};
+            std::unordered_map<std::string, nlohmann::json> potential_configs {};
             std::vector<nlohmann::json> ext_configs;
 
+            // Retrieve configs
             if ( !retrieve_ext_configs(_configPath, ext_configs) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_parse_file_type> \"retrieve_ext_configs\" failed"));
                 return false;
@@ -1086,9 +1092,12 @@ namespace burn_in_data_report
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    futures[i] = std::async(
-                                            verify_configs, potential_configs, std::cref(file_lines_[i]),
-                                            settings_[i].get_headermaxlim(), std::ref(configs[i]));
+                    futures[i] =
+                        std::async(
+                            verify_configs, potential_configs,
+                            std::cref(file_lines_[i]), settings_[i].get_headermaxlim(),
+                            std::ref(configs[i])
+                        );
                 }
             }
 
@@ -1099,11 +1108,6 @@ namespace burn_in_data_report
                     if ( success_[i] ) {
                         settings_[i].set_config(configs[i]);
                         settings_[i].set_format(FileFormat(configs[i].at("name"), configs[i]));
-#ifdef DEBUG
-                        print("LOGGING CONFIG: " +
-                              std::string(settings_[i].get_config().dump()),
-                              4);
-#endif
                     }
                 }
             }
@@ -1148,8 +1152,9 @@ namespace burn_in_data_report
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
                     // Set header limit to start of data
-                    if ( futures[i].get() )
+                    if ( futures[i].get() ) {
                         settings_[i].set_header_lim(header_lims[i] + 1);
+                    }
                     // process failed
                     else {
                         settings_[i].set_header_lim(0);
@@ -1174,17 +1179,14 @@ namespace burn_in_data_report
                      const std::vector<std::string_view>& lines,
                      file_settings& settings ) noexcept {
         try {
-            auto file_write_time =
-                std::chrono::sys_time<nano>(get_file_write_time<nano>(file));
+            const auto file_write_time =
+                std::chrono::sys_time<nano>{ get_file_write_time<nano>(file) };
             settings.set_last_write(file_write_time);
 
             std::string method = settings.get_config().at("start_time").at("method");
             auto& params = settings.get_config().at("start_time").at("params");
             std::vector<std::string> start_matches, increment_matches;
 
-#ifdef DEBUG
-            write_log("Checking test start time:\n");
-#endif
             // get test start time
             if ( method == "InFile" ) {
                 const std::regex start_pattern = params.at("re_pattern");
@@ -1209,13 +1211,12 @@ namespace burn_in_data_report
                 }
             }
             else if ( method == "InData" ) {
-                const std::regex start_pattern = params.at("re_pattern");
-                const std::string delim{ settings.get_config().at("delim").get<std::string>() };
-
                 // Parse start time from first line of data
+                const auto& delim{ settings.get_config().at("delim").get<std::string>() };
                 const auto& data{ lines[settings.get_header_lim()] };
-                const auto split_data{ split_str(data, delim) };
-                const auto start_time_str{ trim(split_data[params.at("col_index").get<uinteger>()]) };
+                const auto& split_data{ split_str(data, delim) };
+                const auto& start_time_str{ trim(split_data[params.at("col_index").get<uinteger>()]) };
+
                 settings.set_start_time(
                     time_format(start_time_str, params.at("time_pattern").get<std::string>(),
                         std::chrono::system_clock::time_point{}
@@ -1247,7 +1248,7 @@ namespace burn_in_data_report
                     settings.set_measurement_period(incr_time);
                 }
             }
-            else if ( method == "value" ) {
+            else if ( method == "Value" ) {
                 using seconds = std::chrono::duration<integer, std::ratio<1i64>>;
                 const seconds incr_time { params.at("increment").get<integer>() };
                 settings.set_measurement_period(incr_time);
