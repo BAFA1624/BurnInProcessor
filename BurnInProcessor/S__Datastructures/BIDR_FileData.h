@@ -1188,7 +1188,7 @@ namespace burn_in_data_report
             std::vector<std::string> start_matches, increment_matches;
 
             // get test start time
-            if ( method == "InFile" ) {
+            if ( method == "in_header" ) {
                 const std::regex start_pattern = params.at("re_pattern");
                 if ( line_capture(lines, start_matches, start_pattern,
                                   settings.get_header_lim()) ) {
@@ -1199,7 +1199,7 @@ namespace burn_in_data_report
                     settings.set_start_time(start_time);
                 }
             }
-            else if ( method == "InFilePath" ) {
+            else if ( method == "in_file_path" ) {
                 const std::regex start_pattern = params.at("re_pattern");
                 std::smatch match;
                 std::string path_str { file.path().string() };
@@ -1210,7 +1210,7 @@ namespace burn_in_data_report
                     settings.set_start_time(start_time);
                 }
             }
-            else if ( method == "InData" ) {
+            else if ( method == "in_data" ) {
                 // Parse start time from first line of data
                 const auto& delim{ settings.get_config().at("delim").get<std::string>() };
                 const auto& data{ lines[settings.get_header_lim()] };
@@ -1238,7 +1238,7 @@ namespace burn_in_data_report
             write_log("Checking interval:\n");
 #endif
             // get interval period
-            if ( method == "InFile" ) {
+            if ( method == "in_header" ) {
                 const std::regex incr_pattern = params.at("re_pattern");
                 if ( line_capture(lines, increment_matches, incr_pattern,
                                   settings.get_header_lim()) ) {
@@ -1248,12 +1248,12 @@ namespace burn_in_data_report
                     settings.set_measurement_period(incr_time);
                 }
             }
-            else if ( method == "Value" ) {
-                using seconds = std::chrono::duration<integer, std::ratio<1i64>>;
-                const seconds incr_time { params.at("increment").get<integer>() };
-                settings.set_measurement_period(incr_time);
+            else if ( method == "value" ) {
+                using seconds = std::chrono::duration<double, std::ratio<1i64>>;
+                const seconds incr_time { params.at("increment").get<double>() };
+                settings.set_measurement_period(std::chrono::duration_cast<nano>(incr_time));
             }
-            else if ( method == "Automatic" ) {
+            else if ( method == "automatic" ) {
                 if ( !is_in(params.at("title").get<std::string>(),
                             settings.get_config().at("titles").get<std::vector<std::string>>()) ) {
                     throw std::runtime_error("Invalid title parsed in configuration file to automatically detect measurement interval.");
@@ -1266,7 +1266,7 @@ namespace burn_in_data_report
                     method, settings.get_config().at("name").get<std::string>()) );
             }
 #ifdef DEBUG
-            if ( method != "Automatic" ) {
+            if ( method != "automatic" ) {
                 write_log(std::format("Success, interval: {}.\n", settings.get_measurement_period()));
             }
             else { write_log("Automatic detection, interval checking postponed.\n"); }
@@ -2386,9 +2386,7 @@ namespace burn_in_data_report
             */
             for ( const auto& [title, type] : this->col_types() ) {
                 // Skip 
-                if ( title == "Combined Time" ) {
-                    continue;
-                }
+                if ( title == "Combined Time" ) { continue; }
 
                 for ( uinteger j = 0; j < files_.size(); ++j ) {
                     switch ( type ) {

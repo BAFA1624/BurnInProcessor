@@ -1,0 +1,7 @@
+{
+    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.default.includePath": [
+        "C:\\Includes"
+    ]
+}
