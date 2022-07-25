@@ -1,0 +1,21 @@
+{
+  "name": "miklos_cw_tests",
+  "file_identifier": "Data Point,Laser Power,Output Voltage,Output Current,Prism Lite PDOF 1,Thermistor 2,Thermistor 1[\\r\\s]*",
+  "header_identifier": "Data Point,Laser Power,Output Voltage,Output Current,Prism Lite PDOF 1,Thermistor 2,Thermistor 1[\\r\\s]*",
+  "delim": ",",
+  "titles": [ "Data Point", "Laser Power", "Output Voltage", "Output Current", "Prism Lite PDOF 1", "Thermistor 2", "Thermistor 1" ],
+  "types": [ 1, 1, 1, 1, 1, 1, 1 ],
+  "start_time": {
+    "method": "in_file_path",
+    "params": {
+      "re_pattern": "[\\d]+_[\\d]+_[\\d]+_[\\d]+_[\\d]+_[\\d]+[\\r\\s]*",
+      "time_pattern": "%d_%m_%Y_%H_%M_%S"
+    }
+  },
+  "interval": {
+    "method": "automatic",
+    "params": {
+      "title": "Data Point"
+    }
+  }
+}

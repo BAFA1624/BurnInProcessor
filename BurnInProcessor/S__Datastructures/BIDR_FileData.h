@@ -396,6 +396,9 @@ namespace burn_in_data_report
         [[nodiscard]] std::vector<bool> get_load_info() const noexcept { return success_; }
 
         bool
+        contains( const std::string& key ) const noexcept { return get_col_types().contains(key); }
+
+        bool
         add_file( const std::filesystem::directory_entry& file ) noexcept;
         bool
         add_files( const std::vector<std::filesystem::directory_entry>& files ) noexcept;
@@ -1094,9 +1097,9 @@ namespace burn_in_data_report
                 if ( success_[i] ) {
                     futures[i] =
                         std::async(
-                            verify_configs, potential_configs,
-                            std::cref(file_lines_[i]), settings_[i].get_headermaxlim(),
-                            std::ref(configs[i])
+                            verify_configs,
+                            std::cref(potential_configs), std::cref(file_lines_[i]),
+                            std::cref(settings_[i].get_headermaxlim()), std::ref(configs[i])
                         );
                 }
             }
@@ -1550,7 +1553,7 @@ namespace burn_in_data_report
                            std::cref(settings), std::ref(statistics));
 
             if ( std::string method = settings.get_config().at("interval").at("method");
-                method == "Automatic" ) {
+                method == "automatic" ) {
                 std::string title = settings.get_config().at("interval").at("params").at("title");
 #ifdef DEBUG
                 print("- Automatic interval detection:", 4);
@@ -2098,20 +2101,17 @@ namespace burn_in_data_report
     inline bool
     file_data::clear_failed_loads() noexcept {
         try {
-            std::vector<uinteger> indexes_to_erase;
-            for ( uinteger i = 0; i < success_.size();
-                  ++i ) { // Find all indexes to erase
-                if ( !success_[i] )
-                    indexes_to_erase.push_back(i);
+            std::vector<uinteger> indices_to_erase;
+            for ( uinteger i = 0; i < success_.size(); ++i ) {
+                if ( !success_[i] ) {
+                    write_log(std::format(" - Failed to load: {}", files_[i].path().string()));
+                    indices_to_erase.push_back(i);
+                }
             }
-            // Iterate indexes_to_erase in reverse, removing vals
-            // Prevents indexes being altered by the removal of other values
-            // Also takes advantage of std::vector<>::erase to be more efficient
-            if ( !indexes_to_erase.empty() ) {
-                integer pos = indexes_to_erase.size() - 1;
-                while ( pos >= 0 ) {
-                    erase(indexes_to_erase[pos]);
-                    pos--;
+
+            if ( !indices_to_erase.empty() ) {
+                for ( const uinteger& idx : indices_to_erase | std::views::reverse ) {
+                    erase(idx);
                 }
             }
         }
@@ -2149,15 +2149,18 @@ namespace burn_in_data_report
     combine_cols( const std::vector<file_settings>& _settings,
                   TypeMap& _col_types ) noexcept {
         try {
-            // for each (i, settings).
-            std::unordered_map<std::string, integer> repeated_keys;
             for ( const auto& settings : _settings ) {
-                // For each (key, type) pair.
                 for ( auto& [key, type] : settings.get_col_types() ) {
-                    if ( !is_in(key, _col_types) ) {
-                        // key not in col_types_ yet, add it.
+                    if ( !_col_types.contains(key) ) {
                         _col_types[key] = type;
-                    }
+                    }/* else {
+                        if ( _col_types.at(key) != type ) {
+                            throw
+                                std::runtime_error(
+                                    "DataType mismatch, columns with matching names across files have different data types."
+                                );
+                        }
+                    }*/
                 }
             }
             return true;
@@ -2177,9 +2180,6 @@ namespace burn_in_data_report
                    const std::vector<file_stats>& _source,
                    file_stats& _dest ) {
         try {
-            // max_ints, max_doubles, min_ints, min_doubles, means, medians, stdevs,
-            // _n
-            // Add all titles to _dest
             for ( const auto& [key, type] : _type_map ) {
                 _dest.max_doubles[key] = 0;
                 _dest.max_ints[key] = 0;
@@ -2187,8 +2187,6 @@ namespace burn_in_data_report
                 _dest.min_ints[key] = std::numeric_limits<integer>::max();
                 _dest._n[key] = {};
             }
-
-            write_log("");
 
             for ( const auto& [key, type] : _type_map ) {
 
@@ -2257,7 +2255,6 @@ namespace burn_in_data_report
 
             // Add empty entries to ints_, doubles_, strings_
             for ( const auto& [key, type] : this->col_types() ) {
-                write_log(std::format(" - {}: {}", key, type_string.at(type)));
                 switch ( type ) {
                 case DataType::INTEGER:
                     ints_[key] = {};

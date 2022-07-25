@@ -198,7 +198,7 @@ get_available_cols() {
         write_log("Retrieving available columns...");
         CComSafeArray<VARIANT> csa(spreadsheet.get_available_cols().size());
         for ( const auto& [i, col] : bidr::enumerate(spreadsheet.get_available_cols()) ) {
-            write_log(std::format("  - {}", col));
+            //write_log(std::format("  - {}", col));
             csa.SetAt(i, _variant_t(bidr::string_bstr_convert(col)));
         }
         return csa.Detach();
@@ -471,9 +471,8 @@ type( LPVARIANT key ) {
     using DT = bidr::DataType;
     try {
         const auto s_key{ bidr::bstr_string_convert(*key) };
-        write_log(std::format("Checking type: {}", s_key));
         const auto type{ spreadsheet.type(s_key) };
-        write_log(std::format("\t-type: {}", bidr::type_string.at(type)));
+        write_log(std::format("\t- {} type: {}", s_key, bidr::type_string.at(type)));
         return static_cast<integer>(type);
     }
     catch ( const std::exception& err ) {

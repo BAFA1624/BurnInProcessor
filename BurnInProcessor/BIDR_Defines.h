@@ -1031,20 +1031,26 @@ namespace burn_in_data_report
         stable_median,
         overall_median
     };
+    const std::map<avg_type, std::string> avg_string{
+        {avg_type::stable_mean, "stable_mean"},
+        {avg_type::overall_mean, "overall_mean"},
+        {avg_type::stable_median, "stable_mean"},
+        {avg_type::overall_median, "overall_median"}
+    };
 
     template <ArithmeticType T>
-    using a_func = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const std::vector<double>&)>;
+    using a_func_t = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const std::vector<double>&)>;
     template <ArithmeticType T>
-    using std_func = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const double&, const std::vector<double>&, const int&)>;
+    using std_func_t = std::function<double(const std::vector<T>&, const uinteger&, const uinteger&, const double&, const std::vector<double>&, const int&)>;
     template <ArithmeticType T>
-    using func_map = std::map<avg_type, std::pair<a_func<T>, std_func<T>>>;
+    using func_map_t = std::map<avg_type, std::pair<a_func_t<T>, std_func_t<T>>>;
 
     template <ArithmeticType T>
-    const func_map<T> avg_func_map {
-        {avg_type::stable_mean, std::pair<a_func<T>, std_func<T>>{stable_mean<T>, stable_stdev<T>}},
-        {avg_type::overall_mean, std::pair<a_func<T>, std_func<T>>{mean<T>, stdev<T>}},
-        {avg_type::stable_median, std::pair<a_func<T>, std_func<T>>{stable_median<T>, stable_stdev<T>}},
-        {avg_type::overall_median, std::pair<a_func<T>, std_func<T>>{median<T>, stdev<T>}}
+    const func_map_t<T> avg_func_map {
+        {avg_type::stable_mean, std::pair<a_func_t<T>, std_func_t<T>>{stable_mean<T>, stable_stdev<T>}},
+        {avg_type::overall_mean, std::pair<a_func_t<T>, std_func_t<T>>{mean<T>, stdev<T>}},
+        {avg_type::stable_median, std::pair<a_func_t<T>, std_func_t<T>>{stable_median<T>, stable_stdev<T>}},
+        {avg_type::overall_median, std::pair<a_func_t<T>, std_func_t<T>>{median<T>, stdev<T>}}
     };
 
     template <typename T>

@@ -1,0 +1,22 @@
+{
+  "name": "eli_alpha_0_I2C",
+  "file_identifier": "Board_sn,Laser_sn,time,elapsed_hr,Fan_1\\(pwm_act_1\\),Fan_1\\(pwm_act_2\\),Fan_1\\(temp_1_C\\),Fan_1\\(temp_2_C\\),Fan_1\\(rpm_1\\),Fan_1\\(rpm_2\\),Fan_2\\(pwm_act_1\\),Fan_2\\(pwm_act_2\\),Fan_2\\(temp_1_C\\),Fan_2\\(temp_2_C\\),Fan_2\\(rpm_1\\),Fan_2\\(rpm_2\\),Fan_3\\(pwm_act_1\\),Fan_3\\(pwm_act_2\\),Fan_3\\(temp_1_C\\),Fan_3\\(temp_2_C\\),Fan_3\\(rpm_1\\),Fan_3\\(rpm_2\\),Fan_4\\(pwm_act_1\\),Fan_4\\(pwm_act_2\\),Fan_4\\(temp_1_C\\),Fan_4\\(temp_2_C\\),Fan_4\\(rpm_1\\),Fan_4\\(rpm_2\\),io_exp\\(Bit_7\\),io_exp\\(Bit_6\\),io_exp\\(Bit_5\\),io_exp\\(Bit_4\\),io_exp\\(Bit_3\\),io_exp\\(Bit_2\\),io_exp\\(Bit_1\\),io_exp\\(Bit_0\\)[\\s]*",
+  "header_identifier": "Board_sn,Laser_sn,time,elapsed_hr,Fan_1\\(pwm_act_1\\),Fan_1\\(pwm_act_2\\),Fan_1\\(temp_1_C\\),Fan_1\\(temp_2_C\\),Fan_1\\(rpm_1\\),Fan_1\\(rpm_2\\),Fan_2\\(pwm_act_1\\),Fan_2\\(pwm_act_2\\),Fan_2\\(temp_1_C\\),Fan_2\\(temp_2_C\\),Fan_2\\(rpm_1\\),Fan_2\\(rpm_2\\),Fan_3\\(pwm_act_1\\),Fan_3\\(pwm_act_2\\),Fan_3\\(temp_1_C\\),Fan_3\\(temp_2_C\\),Fan_3\\(rpm_1\\),Fan_3\\(rpm_2\\),Fan_4\\(pwm_act_1\\),Fan_4\\(pwm_act_2\\),Fan_4\\(temp_1_C\\),Fan_4\\(temp_2_C\\),Fan_4\\(rpm_1\\),Fan_4\\(rpm_2\\),io_exp\\(Bit_7\\),io_exp\\(Bit_6\\),io_exp\\(Bit_5\\),io_exp\\(Bit_4\\),io_exp\\(Bit_3\\),io_exp\\(Bit_2\\),io_exp\\(Bit_1\\),io_exp\\(Bit_0\\)[\\s]*",
+  "delim": ",",
+  "titles": [ "Board_sn", "Laser_sn", "time", "elapsed_hr", "Fan_1(pwm_act_1)", "Fan_1(pwm_act_2)", "Fan_1(temp_1_C)", "Fan_1(temp_2_C)", "Fan_1(rpm_1)", "Fan_1(rpm_2)", "Fan_2(pwm_act_1)", "Fan_2(pwm_act_2)", "Fan_2(temp_1_C)", "Fan_2(temp_2_C)", "Fan_2(rpm_1)", "Fan_2(rpm_2)", "Fan_3(pwm_act_1)", "Fan_3(pwm_act_2)", "Fan_3(temp_1_C)", "Fan_3(temp_2_C)", "Fan_3(rpm_1)", "Fan_3(rpm_2)", "Fan_4(pwm_act_1)", "Fan_4(pwm_act_2)", "Fan_4(temp_1_C)", "Fan_4(temp_2_C)", "Fan_4(rpm_1)", "Fan_4(rpm_2)", "io_exp(Bit_7)", "io_exp(Bit_6)", "io_exp(Bit_5)", "io_exp(Bit_4)", "io_exp(Bit_3)", "io_exp(Bit_2)", "io_exp(Bit_1)", "io_exp(Bit_0)" ],
+  "types": [ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 ],
+  "start_time": {
+    "method": "in_data",
+    "params": {
+      "time_pattern": "%m/%d/%Y %H:%M:%S AM",
+	  "col_index": 2
+    }
+  },
+  "interval": {
+    "method": "value",
+    "params": {
+      "increment": 30
+    }
+  },
+  "trim_filter_key": ""
+}

@@ -1,0 +1,22 @@
+{
+  "name": "CSVDefaultConfig",
+  "file_identifier": "Data Point,Laser Power,PDOF 1,Output Voltage,Output Current,PDOF 1,PDOF 2,Temperature Monitor 1 \\(RAL LCMS\\),Temperature Monitor 2 \\(BDO LCMS\\),Temperature Monitor 4 \\(PUMP\\),Temperature Monitor 5 \\(Inlet Water\\),Temperature Monitor 6 \\(Ambient\\),Humidity Monitor[\\r\\s]*",
+  "header_identifier": "Data Point,Laser Power,PDOF 1,Output Voltage,Output Current,PDOF 1,PDOF 2,Temperature Monitor 1 \\(RAL LCMS\\),Temperature Monitor 2 \\(BDO LCMS\\),Temperature Monitor 4 \\(PUMP\\),Temperature Monitor 5 \\(Inlet Water\\),Temperature Monitor 6 \\(Ambient\\),Humidity Monitor[\\r\\s]*",
+  "delim": ",",
+  "titles": [ "Data Point", "Laser Power", "PDOF_1", "Output Voltage", "Output Current", "PDOF 1", "PDOF 2", "Temperature Monitor 1 (RAL LCMS) ", "Temperature Monitor 2 (BDO LCMS) ", "Temperature Monitor 4 (PUMP) ", "Temperature Monitor 5 (Inlet Water) ", "Temperature Monitor 6 (Ambient) ", "Humidity Monitor" ],
+  "types": [ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ],
+  "start_time": {
+    "method": "in_file_path",
+    "params": {
+      "re_pattern": "[\\d]+_[\\d]+_[\\d]+_[\\d]+_[\\d]+_[\\d]+[\\r\\s]*",
+      "time_pattern": "%d_%m_%Y_%H_%M_%S"
+    }
+  },
+  "interval": {
+    "method": "value",
+    "params": {
+      "increment": 10
+    }
+  },
+  "trim_filter_key": "PDOF 1"
+}
