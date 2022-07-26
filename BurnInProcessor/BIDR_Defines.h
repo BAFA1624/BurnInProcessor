@@ -1339,16 +1339,34 @@ namespace burn_in_data_report
         return copy += b;
     }
 
+    // const std::input_iterator auto
     inline std::string
-    concatenate( const std::input_iterator auto start,
-                 const std::input_iterator auto end,
-                 const std::string_view delimiter) {
+    concatenate( const std::vector<std::string>::const_iterator start,
+                 const std::vector<std::string>::const_iterator end,
+                 const std::string_view delimiter ) {
         assert( start <= end );
         if ( start == end ) { return ""; }
 
         auto result =
             std::accumulate(start, end, std::string{""},
-                [&delimiter]( const auto lhs, const auto& rhs){ return lhs + rhs + delimiter; });
+                [&delimiter]( const std::string& lhs, const std::string& rhs)
+                { return lhs + rhs + delimiter; });
+
+        for ( uinteger i{0}; i < delimiter.size(); ++i ) { result.pop_back(); }
+
+        return result;
+    }
+    std::string
+    concatenate( const std::input_iterator auto start,
+                 const std::input_iterator auto end,
+                 const std::string_view delimiter ) {
+        assert( start <= end );
+        if ( start == end ) { return ""; }
+
+        auto result =
+            std::accumulate(start, end, std::string{""},
+                            [&delimiter]( const std::string& lhs, const std::string& rhs)
+                            { return lhs + rhs + delimiter; });
 
         for ( uinteger i{0}; i < delimiter.size(); ++i ) { result.pop_back(); }
 
@@ -1480,8 +1498,7 @@ namespace burn_in_data_report
         }
     }
 
-    template <ArithmeticType T>
-    auto
+    template <ArithmeticType T> auto
     check_max(const std::vector<T>& data) {
         if ( data.empty() ) {
             write_err_log(std::runtime_error("<check_max> Empty vector received."));
@@ -1490,8 +1507,7 @@ namespace burn_in_data_report
         return *std::max_element(data.cbegin(), data.cend());
     }
 
-    template <ArithmeticType T>
-    auto
+    template <ArithmeticType T> auto
     check_min(const std::vector<T>& data) {
         if ( data.empty() ) {
             write_err_log(std::runtime_error("<check_min> Empty vector received."));

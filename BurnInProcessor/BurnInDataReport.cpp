@@ -78,6 +78,7 @@ init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
         write_log("Initializing spreadsheet...");
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
                              max_off_time_minutes, do_trimming == FALSE ? false : true);
+        write_log("");
         return result;
     }
     catch ( const std::exception& err ) {

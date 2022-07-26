@@ -79,38 +79,6 @@ namespace burn_in_data_report
         return false;
     }
 
-    template <typename T>
-    static std::vector<T>
-    apply_filter( const std::vector<T>& _data,
-                  const indices_t& _filter ) {
-        try {
-            if ( _filter.size() == 0 ) { return _data; }
-            uinteger sz = std::accumulate(
-                                          _data.cbegin(), _data.cend(), static_cast<uinteger>( 0 ),
-                                          []( uinteger a, const range_t& b ) {
-                                              return a + (b.second - b.first);
-                                          });
-            // Calculate size of new vector:
-            uinteger sz2 { 0 };
-            for ( const auto& [first, last] : _filter ) { sz2 += (last - first); }
-            assert(sz == sz2);
-            std::vector<T> result;
-            result.reserve(sz);
-
-            for ( const auto& [first, last] : _filter ) {
-                result.insert(result.end(), _data.begin() + first,
-                              _data.begin() + last);
-            }
-
-            result.shrink_to_fit();
-            return result;
-        }
-        catch ( const std::exception& err ) {
-            write_err_log(err, "DLL: <apply_filter>");
-            return std::vector<T> {};
-        }
-    }
-
 
     class file_stats
     {
@@ -1770,49 +1738,52 @@ namespace burn_in_data_report
             assert(data_type != DataType::NONE);
 
             auto measure_downtime =
-                [&interval, &max_off_time]<ArithmeticType T>(
+                [&interval, &max_off_time]
+                <ArithmeticType T>(
                 const std::vector<T>& data,
                 const T& cutoff ) -> indices_t {
-                indices_t result;
-                auto downtime = nano::zero();
-                uinteger first { 0 };
+                    indices_t result;
 
-                for ( auto [i, datapoint] : enumerate(data) ) {
-                    #define cont_timer 1
-                    #define restart_timer 0
-                    switch ( datapoint >= cutoff
-                                 ? restart_timer
-                                 : cont_timer ) {
-                    case cont_timer:
-                        downtime += interval;
-                        break;
-                    case restart_timer:
-                        downtime = nano::zero();
-                        first = i + 1;
-                        break;
-                    default:
-                        break;
-                    }
-                    #undef cont_timer
-                    #undef restart_timer
+                    auto downtime = nano::zero();
+                    uinteger range_start{ 0 };
 
-                    // If "downtime" > max time expected for OFF section of laser cycle
-                    if ( downtime > max_off_time ) {
-                        // Find full OFF time, push to result, increment i to the next
-                        // datapoint
-                        for ( uinteger j { i }; j < data.size(); ++j ) {
+                    for ( auto [i, datapoint] : enumerate(data) ) {
+                        #define cont_timer 1
+                        #define restart_timer 0
+                        switch ( datapoint >= cutoff
+                                     ? restart_timer
+                                     : cont_timer ) {
+                        case cont_timer:
                             downtime += interval;
-                            if ( data[j] > cutoff || j == data.size() - 1 ) {
-                                result.emplace_back(std::pair { first, j + 1 });
-                                i = j + 1;
-                                break;
+                            break;
+                        case restart_timer:
+                            downtime = nano::zero();
+                            range_start = i + 1;
+                            break;
+                        default:
+                            break;
+                        }
+                        #undef cont_timer
+                        #undef restart_timer
+
+                        // If "downtime" > max time expected for OFF section of laser cycle
+                        if ( downtime > max_off_time ) {
+                            // Find full OFF time, push to result, increment i to the next
+                            // datapoint
+                            for ( uinteger j { i }; j < data.size(); ++j ) {
+                                downtime += interval;
+                                if ( data[j] > cutoff || j == data.size() - 1 ) {
+                                    result.emplace_back(range_start, j + 1);
+                                    i = j + 1;
+                                    range_start = i;
+                                    break;
+                                }
                             }
                         }
                     }
-                }
 
-                return result;
-            };
+                    return result;
+                };
 
             indices_t trim_ranges;
             // get sections of assumed invalid data
@@ -1871,34 +1842,37 @@ namespace burn_in_data_report
             for ( const auto& [key, type] : type_map ) {
                 if ( key == "Combined Time" ) { continue; }
                 switch ( type ) {
-                case DataType::INTEGER:
-                    if ( ints.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::INTEGER: {
+                        if ( ints.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
-                case DataType::DOUBLE:
-                    if ( doubles.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::DOUBLE: {
+                        if ( doubles.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
-                case DataType::STRING:
-                    if ( strings.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::STRING: {
+                        if ( strings.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
                 case DataType::NONE:
