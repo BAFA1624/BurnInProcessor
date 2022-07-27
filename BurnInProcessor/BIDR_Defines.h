@@ -1467,6 +1467,28 @@ namespace burn_in_data_report
 
         return sa_result.Detach();
     }
+    /*inline LPSAFEARRAY
+    array_convert( const std::vector<std::string>& data,
+                   const std::function<VARIANT(const std::string&)>& conversion_op,
+                   const bool& copy=true ) {
+        SAFEARRAYBOUND bounds[2];
+        bounds[1].cElements = 1;
+        bounds[1].lLbound = 0;
+        bounds[0].cElements = data.size();
+        bounds[0].lLbound = 0;
+        CComSafeArray<VARIANT> sa_result( bounds, 2 );
+
+        LONG indexes[2];
+        indexes[1] = 0;
+
+        for ( const auto& [i, x] : enumerate(data) ) {
+            indexes[0] = i;
+            write_log(std::format("{}: {}", i, SysStringLen(_bstr_t(x.c_str()))));
+            sa_result.MultiDimSetAt( indexes, conversion_op(x) );
+        }
+
+        return sa_result.Detach();
+    }*/
 
     inline CComSafeArray<BSTR>
     VSA_to_BSA( const CComSafeArray<VARIANT> vsa ) {

@@ -539,28 +539,23 @@ namespace burn_in_data_report
                 write_log(std::format("Averaging {}", _key));
                 switch ( type ) {
                 case DataType::INTEGER: {
-                    write_log("INTEGER");
                     const auto& [avgs, std] =
                         avg(int_data_[_key], i_errors_[_key], avg_func_map<integer>);
                     int_data_[_key] = avgs;
                     i_errors_[_key] = std;
                 } break;
                 case DataType::DOUBLE: {
-                    write_log("DOUBLE");
                     const auto& [avgs, std] =
                         avg(double_data_[_key], d_errors_[_key], avg_func_map<double>);
                     double_data_[_key] = avgs;
                     d_errors_[_key] = std;
                 } break;
                 case DataType::STRING: {
-                    write_log("STRING");
                     /*
                      * Averaging string data doesn't make much sense.
                      * Instead, concatenate data & give NaN as the standard deviation.
                      */
                     const auto& data = string_data_.at(_key);
-
-                    write_log("& to data");
 
                     // { { start_idx, end_idx }, ... } ==> { { start_idx, ..., end_idx }, ... }
                     constexpr auto range_to_span =
@@ -580,21 +575,15 @@ namespace burn_in_data_report
                         | std::views::transform(span_to_strs)
                         | std::views::transform(strs_to_str);
 
-                    write_log("pipeline made");
-
                     std::vector<std::string> tmp;
                     tmp.reserve(ranges_copy.size());
                     s_errors_[_key].clear();
                     s_errors_.reserve(ranges_copy.size());
 
-                    write_log("reserved memory");
-
-                    write_log("Beginning filt_rng_to_str");
                     for ( const auto& s : ranges_copy | filt_rng_to_str ) {
                         tmp.emplace_back(s);
                         s_errors_[_key].emplace_back(std::numeric_limits<double>::signaling_NaN());
                     }
-                    write_log("Done.");
 
                     string_data_[_key] = std::move(tmp);
                 } break;
@@ -716,7 +705,6 @@ namespace burn_in_data_report
                 }
                 case DataType::STRING: {
                     auto& data { string_data_[_key] };
-                    write_log("data &");
 
                     uinteger _no_rows { data.size() / _n_group}, offset{ data.size() % _n_group };
 
@@ -857,19 +845,30 @@ namespace burn_in_data_report
                         : _n_points;
                     const uinteger n_group { data.size() / n_points}, overflow{ data.size() % n_points };
 
+                    s_reduced.clear();
                     s_reduced.reserve(n_points);
 
-                    for ( uinteger i { 0 }; i < n_points; ++i ) {
-                        const auto start {
-                                std::next(data.begin(), static_cast<integer>( i ) * n_group)
-                            };
-                        const auto end {
-                                std::next(data.begin(),
-                                          (i == n_points - overflow)
-                                              ? static_cast<integer>( i ) * (static_cast<integer>( n_group ) + 1)
-                                              : static_cast<integer>( i ) * (static_cast<integer>( n_group ) + 1) + 1)
-                            };
-                        s_reduced.emplace_back( concatenate(start, end, ",") );
+                    for ( uinteger i{ 0 }; i < n_points - overflow; ++i ) {
+                        const uinteger start{i * n_group}, end{(i+1) * n_group};
+                        s_reduced.emplace_back(
+                            concatenate(
+                                data.cbegin() + start,
+                                data.cbegin() + end,
+                                ","
+                            )
+                        );
+                    }
+                    const uinteger startpoint{ (n_points - overflow) * n_group };
+                    for ( uinteger i{ 0 }; i < overflow; ++i ) {
+                        const uinteger start{startpoint + i * n_group + i},
+                            end{startpoint + (i + 1) * n_group + i + 1};
+                        s_reduced.emplace_back(
+                            concatenate(
+                                data.cbegin() + start,
+                                data.cbegin() + end,
+                                ","
+                            )
+                        );
                     }
 
                     s_errors_[_key].insert(

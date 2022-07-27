@@ -384,12 +384,13 @@ get( LPVARIANT key ) {
         const auto s_key { bidr::bstr_string_convert(*key) };
         const auto type { spreadsheet.type( s_key ) };
 
-        if (  type == DT::NONE ) {
-            throw std::out_of_range( "Key not found." );
-        }
+        if (  type == DT::NONE ) { throw std::out_of_range( "Key not found." ); }
+
+        write_log(std::format("Sending {}", s_key));
 
         switch ( type ) {
         case DT::INTEGER: {
+            write_log(std::format("Size: {}", spreadsheet.get_i(s_key).size()));
             return bidr::array_convert<integer, VARIANT>(
                     spreadsheet.get_i(s_key),
                     [](const integer& i)
@@ -398,6 +399,7 @@ get( LPVARIANT key ) {
                 );
             }
         case DT::DOUBLE: {
+            write_log(std::format("Size: {}", spreadsheet.get_d(s_key).size()));
             return bidr::array_convert<double, VARIANT>(
                     spreadsheet.get_d(s_key),
                     [](const double& d)
@@ -406,6 +408,7 @@ get( LPVARIANT key ) {
                 );
             }
         case DT::STRING: {
+            write_log(std::format("Size: {}", spreadsheet.get_s(s_key).size()));
             return bidr::array_convert<std::string, VARIANT>(
                     spreadsheet.get_s(s_key),
                     [](const std::string& s)
@@ -417,6 +420,7 @@ get( LPVARIANT key ) {
             }
         }
 
+        write_log("wut");
         return SafeArrayCreateVectorEx(VT_VARIANT, 0, 0, nullptr);
     }
     catch ( const std::exception& err ) {
