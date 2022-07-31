@@ -34,13 +34,13 @@
 #ifdef _WIN64
 using integer = int64_t;
 using uinteger = uint64_t;
-#define FMT "%lld"
-#define WFMT L"%lld"
+constexpr auto fmt "%lld"
+constexpr auto wfmt L"%lld"
 #else
 using integer = int32_t;
 using uinteger = uint32_t;
-#define FMT "%d"
-#define WFMT L"%d"
+constexpr auto fmt = "%d";
+constexpr auto wfmt = L"%d";
 #endif
 
 // Ensure 64-bit double
@@ -332,8 +332,8 @@ namespace burn_in_data_report
             const uinteger& _first,
             const uinteger& _end,
             const std::vector<double>& stdevs) {
-        if ( _data.empty() || (_end - _first + 1 == 0) )
-            throw median_of_empty_list_exception();
+        if ( _data.empty() || _end - _first + 1 == 0 ) { throw median_of_empty_list_exception(); }
+
 
         auto tmp = _data;
 
@@ -348,6 +348,7 @@ namespace burn_in_data_report
             med = (*max_it + med) / 2.0;
         }
 
+        write_log(std::format("{}", med));
         return med;
     }
 

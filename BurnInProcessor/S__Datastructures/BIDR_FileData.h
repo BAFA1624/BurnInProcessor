@@ -14,9 +14,9 @@
 #include <string_view>
 #include <thread>
 
+#include "BIDR_StorageTypes.h"
 #include "../BIDR_Defines.h"
 #include "../F__File_Parse/BIDR_FileParse.h"
-#include "BIDR_StorageTypes.h"
 
 #include "BIDR_Timer.h"
 
@@ -1408,7 +1408,7 @@ namespace burn_in_data_report
                     case DataType::INTEGER: {
                         integer _integer { 0 };
                         sscanf_return_val =
-                            sscanf_s(buf, FMT, &_integer);
+                            sscanf_s(buf, fmt, &_integer);
                         ints[col_title].emplace_back(_integer);
                         break;
                     }

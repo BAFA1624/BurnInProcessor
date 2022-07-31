@@ -492,6 +492,7 @@ namespace burn_in_data_report
                 break;
             }
 
+            write_log(std::format("Average type: {}", avg_string.at(_a_type)));
             write_log(std::format("no_rows: {}", no_rows));
 
             // No reduction if it isn't set & no_rows < MAX_ROWS
@@ -519,7 +520,6 @@ namespace burn_in_data_report
                     const std::vector<double>& stdevs,
                     const func_map_t<T>& a_func_map)
                 -> std::pair<std::vector<T>, std::vector<double>> {
-                        write_log("avg...");
                         const auto& [avg_func, std_func] = a_func_map.at(_a_type);
                         std::vector<T> avgs;
                         std::vector<double> new_stdevs;
@@ -532,11 +532,9 @@ namespace burn_in_data_report
                             new_stdevs.emplace_back(std_func(data, first, last, avgs.back(), stdevs, 0));
                         }
 
-                        write_log("avg, done.");
                         return { avgs, new_stdevs };
                     };
 
-                write_log(std::format("Averaging {}", _key));
                 switch ( type ) {
                 case DataType::INTEGER: {
                     const auto& [avgs, std] =
@@ -591,7 +589,6 @@ namespace burn_in_data_report
                     throw std::runtime_error("Invalid type received.");
                 }
                 }
-                write_log("Done.");
 
                 // Clear ranges_ now cycles have been
                 // avg'd into single data points
