@@ -2363,7 +2363,7 @@ namespace burn_in_data_report
                     switch ( type ) {
                     case DataType::INTEGER:
                         concat_vals(file_ints_[j], ints_, title, type, ints_lens_[j],
-                                   statistics_[j], 0);
+                                   statistics_[j], static_cast<integer>(0));
                         break;
                     case DataType::DOUBLE:
                         concat_vals(file_doubles_[j], doubles_, title, type, doubles_lens_[j],

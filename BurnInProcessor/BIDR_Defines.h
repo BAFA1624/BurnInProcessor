@@ -34,8 +34,8 @@
 #ifdef _WIN64
 using integer = int64_t;
 using uinteger = uint64_t;
-constexpr auto fmt "%lld"
-constexpr auto wfmt L"%lld"
+constexpr auto fmt{ "%lld" };
+constexpr auto wfmt{ L"%lld" };
 #else
 using integer = int32_t;
 using uinteger = uint32_t;
