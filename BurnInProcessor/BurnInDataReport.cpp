@@ -181,9 +181,9 @@ LPSAFEARRAY WINAPI
 get_current_cols() {
     try {
         write_log("Retrieving loaded columns...");
-        CComSafeArray<VARIANT> csa(spreadsheet.get_current_cols().size());
+        CComSafeArray<VARIANT> csa(static_cast<ULONG>(spreadsheet.get_current_cols().size()));
         for ( const auto& [i, col] : bidr::enumerate(spreadsheet.get_current_cols()) ) {
-            csa.SetAt(i, _variant_t(bidr::string_bstr_convert(col)));
+            csa.SetAt(static_cast<ULONG>(i), _variant_t(bidr::string_bstr_convert(col)));
         }
         return csa.Detach();
     }
@@ -198,10 +198,10 @@ LPSAFEARRAY WINAPI
 get_available_cols() {
     try {
         write_log("Retrieving available columns...");
-        CComSafeArray<VARIANT> csa(spreadsheet.get_available_cols().size());
+        CComSafeArray<VARIANT> csa(static_cast<ULONG>(spreadsheet.get_available_cols().size()));
         for ( const auto& [i, col] : bidr::enumerate(spreadsheet.get_available_cols()) ) {
             //write_log(std::format("  - {}", col));
-            csa.SetAt(i, _variant_t(bidr::string_bstr_convert(col)));
+            csa.SetAt(static_cast<ULONG>(i), _variant_t(bidr::string_bstr_convert(col)));
         }
         return csa.Detach();
     }
@@ -508,7 +508,8 @@ file_boundaries() {
 
         write_log(std::format("boundaries.size(): {}", boundaries.size()));
 
-        if ( boundaries.empty() ) { return nullptr }
+        if ( boundaries.empty() ) { return nullptr; }
+        return nullptr;
     }
     catch ( const std::exception& err ) {
         write_log("sdlkgdsklg");

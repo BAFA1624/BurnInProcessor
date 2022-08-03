@@ -499,19 +499,19 @@ namespace burn_in_data_report
                 return true;
             };
 
-            adjust_size(encodings_, files_.size(), encoding_type::UNKNOWN);
-            adjust_size(handles_, files_.size(), memory_handle {});
-            adjust_size(settings_, files_.size(),
+            adjust_size(encodings_, static_cast<uinteger>(files_.size()), encoding_type::UNKNOWN);
+            adjust_size(handles_, static_cast<uinteger>(files_.size()), memory_handle {});
+            adjust_size(settings_, static_cast<uinteger>(files_.size()),
                         file_settings { std::string(""), header_max_sz_ });
-            adjust_size(success_, files_.size(), true);
-            adjust_size(file_lines_, files_.size(), {});
-            adjust_size(file_ints_, files_.size(), IMap {});
-            adjust_size(file_doubles_, files_.size(), DMap {});
-            adjust_size(file_strings_, files_.size(), SMap {});
-            adjust_size(ints_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(doubles_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(strings_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(statistics_, files_.size(), file_stats {});
+            adjust_size(success_, static_cast<uinteger>(files_.size()), true);
+            adjust_size(file_lines_, static_cast<uinteger>(files_.size()), {});
+            adjust_size(file_ints_, static_cast<uinteger>(files_.size()), IMap {});
+            adjust_size(file_doubles_, static_cast<uinteger>(files_.size()), DMap {});
+            adjust_size(file_strings_, static_cast<uinteger>(files_.size()), SMap {});
+            adjust_size(ints_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(doubles_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(strings_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(statistics_, static_cast<uinteger>(files_.size()), file_stats {});
 
             Timer t;
             if ( !this->async_get_files() ) { // Retrieve file
@@ -728,7 +728,7 @@ namespace burn_in_data_report
             print("- Checking encoding type: " + encoding_string.at(type), 4);
 #endif
             _handle.get(chars, _handle._data,
-                        encode_arr.size()); // get x chars to compare against
+                        static_cast<uinteger>(encode_arr.size())); // get x chars to compare against
             if ( !chars )                    // Failed break out & return default
             {
                 break;
@@ -761,7 +761,7 @@ namespace burn_in_data_report
 
             if ( _encoding != encoding_type::UNKNOWN ) {
                 write_log("- Encoding found: " + encoding_string.at(_encoding) + ", adjusting..." );
-                const uinteger offset = encoding_bom.at(_encoding).size();
+                const uinteger offset{ static_cast<uinteger>(encoding_bom.at( _encoding ).size()) };
                 tmp_data = new char[access_checked(_handle._sz - offset)];
 
                 _handle.get(tmp_data, offset, _handle._sz);
@@ -1311,9 +1311,9 @@ namespace burn_in_data_report
             /*for ( uinteger i = 0; i < cols.size(); ++i ) { */
             for ( const auto& [i, col_title] : enumerate(cols) ) {
                 settings.col_types()[col_title] = col_types[i];
-                settings.col_order()[col_title] = i;
+                settings.col_order()[col_title] = static_cast<uinteger>(i);
             }
-            settings.set_n_cols(cols.size());
+            settings.set_n_cols(static_cast<uinteger>(cols.size()));
 
             return true;
         }
@@ -1641,21 +1641,21 @@ namespace burn_in_data_report
             strings_len = 0;
             for ( auto& val : ints | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x = static_cast<uinteger>(val.size());
                 if ( ints_len == 0 )
                     ints_len = x;
                 assert(x == ints_len);
             }
             for ( auto& val : doubles | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x =  static_cast<uinteger>(val.size());
                 if ( doubles_len == 0 )
                     doubles_len = x;
                 assert(x == doubles_len);
             }
             for ( auto& val : strings | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x = static_cast<uinteger>(val.size());
                 if ( strings_len == 0 )
                     strings_len = x;
                 assert(x == strings_len);
@@ -1850,13 +1850,13 @@ namespace burn_in_data_report
             uinteger len{ 0 };
             switch ( data_type ) {
             case DataType::INTEGER:
-                len = ints.at(filter_key).size();
+                len = static_cast<uinteger>(ints.at(filter_key).size());
                 break;
             case DataType::DOUBLE:
-                len = doubles.at(filter_key).size();
+                len = static_cast<uinteger>(doubles.at(filter_key).size());
                 break;
             case DataType::STRING:
-                len = strings.at(filter_key).size();
+                len = static_cast<uinteger>(strings.at(filter_key).size());
                 break;
             case DataType::NONE:
                 break;
@@ -2061,8 +2061,8 @@ namespace burn_in_data_report
 
                 if ( i >= j ) { return j; }
 
-                if ( !_f.swap(i, j) )
-                    return _f.files_.size();
+                if ( !_f.swap( i, j ) )
+                    { return static_cast<uinteger>(_f.files_.size()); }
             }
         };
         try {
@@ -2129,7 +2129,7 @@ namespace burn_in_data_report
     file_data::sort_files() noexcept {
         try {
             // Sort:
-            if ( !file_data_qsrt(*this, 0, files_.size() - 1, 0) ) {
+            if ( !file_data_qsrt(*this, 0, static_cast<uinteger>(files_.size()) - 1, 0) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::sort_files> file_data_qsrt failed."));
                 return false;
             }
@@ -2312,7 +2312,7 @@ namespace burn_in_data_report
                 /*
                 * Add record of file boundary
                 */
-                file_boundaries_.emplace_back(file_boundary_t(i, files_[i].path().string(), current_time, settings.get_start_time()));
+                file_boundaries_.emplace_back(file_boundary_t(static_cast<uinteger>(i), files_[i].path().string(), current_time, settings.get_start_time()));
                 write_log(std::format("file boundary: {}, {}, {}, {}", i, files_[i].path().string(), current_time, settings.get_start_time()));
             }
             auto& cols{ col_types() };
@@ -2386,7 +2386,7 @@ namespace burn_in_data_report
                     switch ( type ) {
                     case DataType::INTEGER:
                         concat_vals(file_ints_[j], ints_, title, type, ints_lens_[j],
-                                   statistics_[j], 0);
+                                   statistics_[j], static_cast<integer>(0));
                         break;
                     case DataType::DOUBLE:
                         concat_vals(file_doubles_[j], doubles_, title, type, doubles_lens_[j],
@@ -2403,7 +2403,7 @@ namespace burn_in_data_report
                 }
             }
 
-            set_n_cols(col_types().size());
+            set_n_cols(static_cast<uinteger>(col_types().size()));
             return true;
         }
         catch ( const std::exception& err ) {

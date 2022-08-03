@@ -330,39 +330,36 @@ namespace burn_in_data_report
                 switch ( type ) {
                 case DataType::INTEGER: {
                     if ( size == 0 ) {
-                        size = int_data_.at(key).size();
+                        size = static_cast<uinteger>(int_data_.at(key).size());
                     }
                     else {
-                        if ( size != int_data_.at(key).size() ) {
+                        if ( size != static_cast<uinteger>(int_data_.at(key).size()) ) {
                             throw
                                 std::runtime_error("\tDLL: <spreadsheet::update_n_rows> Data length mismatch.");
-                            result = false;
                         }
                     }
                 }
                 break;
                 case DataType::DOUBLE: {
                     if ( size == 0 ) {
-                        size = double_data_.at(key).size();
+                        size = static_cast<uinteger>(double_data_.at(key).size());
                     }
                     else {
-                        if ( size != double_data_.at(key).size() ) {
+                        if ( size != static_cast<uinteger>(double_data_.at(key).size()) ) {
                             throw
                                 std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch.");
-                            result = false;
                         }
                     }
                 }
                 break;
                 case DataType::STRING: {
                     if ( size == 0 ) {
-                        size = string_data_.at(key).size();
+                        size = static_cast<uinteger>(string_data_.at(key).size());
                     }
                     else {
-                        if ( size != string_data_.at(key).size() ) {
+                        if ( size != static_cast<uinteger>(string_data_.at(key).size()) ) {
                             throw
                                 std::runtime_error("DLL: <spreadsheet::update_n_rows> Data length mismatch.");
-                            result = false;
                         }
                     }
                 }
@@ -485,13 +482,13 @@ namespace burn_in_data_report
             uinteger no_rows { 0 };
             switch ( type ) {
             case DataType::INTEGER:
-                no_rows = int_data_.at(_key).size();
+                no_rows = static_cast<uinteger>(int_data_.at(_key).size());
                 break;
             case DataType::DOUBLE:
-                no_rows = double_data_.at(_key).size();
+                no_rows = static_cast<uinteger>(double_data_.at(_key).size());
                 break;
             case DataType::STRING:
-                no_rows = string_data_.at(_key).size();
+                no_rows = static_cast<uinteger>(string_data_.at(_key).size());
                 break;
             case DataType::NONE:
                 break;
@@ -534,7 +531,7 @@ namespace burn_in_data_report
 
                         for ( const auto& [first, last] : ranges_copy ) {
                             avgs.emplace_back(static_cast<T>(avg_func(data, first, last, stdevs)));
-                            new_stdevs.emplace_back(std_func(data, first, last, avgs.back(), stdevs, 0));
+                            new_stdevs.emplace_back(std_func(data, first, last, static_cast<double>(avgs.back()), stdevs, 0));
                         }
 
                         return { avgs, new_stdevs };
@@ -626,9 +623,9 @@ namespace burn_in_data_report
                             a_func_map.at(_a_type);
 
                         const uinteger n_points =
-                            data.size() / n_group;
+                            static_cast<uinteger>(data.size()) / n_group;
                         const uinteger overflow =
-                            data.size() % n_group ? 1 : 0;
+                            static_cast<uinteger>(data.size()) % n_group ? 1 : 0;
 
                         reduced_storage.clear();
                         reduced_storage.reserve(n_points + overflow);
@@ -660,7 +657,7 @@ namespace burn_in_data_report
                                 static_cast<K>(
                                     avg_func(
                                         data,
-                                        n_points * n_group, (n_points * n_group) + (data.size() % n_group),
+                                        n_points * n_group, (n_points * n_group) + (static_cast<uinteger>(data.size()) % n_group),
                                         stdevs
                                     )
                                 )
@@ -668,7 +665,7 @@ namespace burn_in_data_report
                             tmp_stdevs.emplace_back(
                                 std_func(
                                     data,
-                                    n_points * n_group, (n_points * n_group) + (data.size() % n_group),
+                                    n_points * n_group, (n_points * n_group) + (static_cast<uinteger>(data.size()) % n_group),
                                     static_cast<double>(reduced_storage.back()),
                                     stdevs, 0
                                 )
@@ -708,7 +705,7 @@ namespace burn_in_data_report
                 case DataType::STRING: {
                     auto& data { string_data_[_key] };
 
-                    uinteger _no_rows { data.size() / _n_group}, offset{ data.size() % _n_group };
+                    const uinteger _no_rows { static_cast<uinteger>(data.size()) / _n_group}, offset{ static_cast<uinteger>(data.size()) % _n_group };
 
                     s_reduced.clear();
                     s_reduced.reserve(_no_rows + (offset > 0 ? 1 : 0));
@@ -757,8 +754,8 @@ namespace burn_in_data_report
 
                         // Calculate num of points per grouping.
                         // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
-                        const auto n_points_arr = std::vector<uinteger>{ _n_points, MAX_ROWS, data.size() };
-                        const uinteger n_points = *std::min_element( n_points_arr.cbegin(), n_points_arr.cend() );
+                        const auto n_points_arr = std::vector<uinteger>{ _n_points, MAX_ROWS, static_cast<uinteger>(data.size()) };
+                        const uinteger n_points = *std::ranges::min_element(n_points_arr.cbegin(), n_points_arr.cend());
 
                         reduced_storage.clear();
                         reduced_storage.reserve( n_points );
@@ -766,8 +763,8 @@ namespace burn_in_data_report
                         std::vector<double> tmp_stdevs;
                         tmp_stdevs.reserve( n_points );
 
-                        const uinteger n_group { data.size() / n_points};
-                        const uinteger overflow { data.size() % n_points};
+                        const uinteger n_group { static_cast<uinteger>(data.size()) / n_points};
+                        const uinteger overflow { static_cast<uinteger>(data.size()) % n_points};
 
                         for ( uinteger i{ 0 }; i < n_points - overflow; ++i ) {
                             reduced_storage.emplace_back(
@@ -791,7 +788,7 @@ namespace burn_in_data_report
 
                         // Add overflow to last few points
                         uinteger count{ 0 }, start_pos{ (n_points - overflow) * n_group }, end_pos{ start_pos };
-                        for ( uinteger i{ (n_points - overflow) * n_group }; i < data.size(); ++i ) {
+                        for ( uinteger i{ (n_points - overflow) * n_group }; i < static_cast<uinteger>(data.size()); ++i ) {
                             if ( ++count == n_group + 1 ) {
                                 reduced_storage.emplace_back(
                                     static_cast<R>(
@@ -845,7 +842,7 @@ namespace burn_in_data_report
                     MAX_ROWS < _n_points || _n_points == 0
                         ? MAX_ROWS
                         : _n_points;
-                    const uinteger n_group { data.size() / n_points}, overflow{ data.size() % n_points };
+                    const uinteger n_group { static_cast<uinteger>(data.size()) / n_points}, overflow{ static_cast<uinteger>(data.size()) % n_points };
 
                     s_reduced.clear();
                     s_reduced.reserve(n_points);
@@ -1260,10 +1257,10 @@ namespace burn_in_data_report
                 * - branch: Tracks which possible branch is true
                 */
                 indices_t results;
-                results.reserve(_data.size() / 10);
+                results.reserve(static_cast<uinteger>(_data.size()) / 10);
                 bool continuous_range { false };
                 uinteger r_start { 0 }, r_end { 0 }, count { 0 };
-                for ( uinteger i = 0; i < _data.size(); ++i ) {
+                for ( uinteger i = 0; i < static_cast<uinteger>(_data.size()); ++i ) {
                     uinteger branch { 0 };
                     branch += _data[i] >= _threshold
                                   ? 2
@@ -1329,7 +1326,7 @@ namespace burn_in_data_report
                     * Handle case where a valid range reaches to the end of the data
                     * without transitioning back below the threshold.
                     */
-                    r_end = _data.size() - 1;
+                    r_end = static_cast<uinteger>(_data.size()) - 1;
                     const auto subranges = sub_range_split(
                                                            _data, r_start, r_end, _max_range_sz);
                     results.insert(results.cend(), subranges.cbegin(),

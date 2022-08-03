@@ -124,7 +124,7 @@ namespace burn_in_data_report
             ptr1++;
         while ( ptr1 != ptr2 && is_whitespace(*ptr2) )
             ptr2--;
-        return std::pair{ ptr1 - sv.data(), ptr2 - sv.data() };
+        return std::pair{ static_cast<integer>(ptr1 - sv.data()), static_cast<integer>(ptr2 - sv.data()) };
     }
 
     // Remove leading & ending whitespace characters

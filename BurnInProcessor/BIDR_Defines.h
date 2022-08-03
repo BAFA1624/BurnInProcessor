@@ -222,19 +222,19 @@ namespace burn_in_data_report
     concept ArithmeticType = std::integral<T> || std::floating_point<T>;
 
     inline const auto
-    int64_t_hash = typeid(integer).hash_code();
+    integer_hash = static_cast<uinteger>(typeid(integer).hash_code());
     inline const auto
-    double_hash  = typeid(double).hash_code();
+    double_hash  = static_cast<uinteger>(typeid(double).hash_code());
     inline const auto
-    string_hash  = typeid(std::string).hash_code();
+    string_hash  = static_cast<uinteger>(typeid(std::string).hash_code());
 
     const std::unordered_map<integer, DataType> hash_to_DataType {
-            { int64_t_hash, DataType::INTEGER },
+            { integer_hash, DataType::INTEGER },
             { double_hash, DataType::DOUBLE },
             { string_hash, DataType::STRING }
         };
     const std::unordered_map<DataType, integer> DataType_to_hash {
-            { DataType::INTEGER, int64_t_hash },
+            { DataType::INTEGER, integer_hash },
             { DataType::DOUBLE, double_hash },
             { DataType::STRING, string_hash }
         };
@@ -353,7 +353,7 @@ namespace burn_in_data_report
         const auto n = (_end - _first) / 2;
         std::ranges::nth_element(tmp.begin() + _first, tmp.begin() + _first + n,
                          tmp.begin() + _end);
-        double med = tmp[n];
+        double med = static_cast<double>(tmp[n]);
 
         if ( !(_end - _first + 1 & 1) ) {
             const auto max_it =
@@ -1199,7 +1199,7 @@ namespace burn_in_data_report
     enumerate( const T&& _iterable ) {
         struct iterator
         {
-            size_t i;
+            uinteger i;
             TIter  iter;
 
             bool operator!=( const iterator& other ) const { return iter != other.iter; }
@@ -1227,7 +1227,7 @@ namespace burn_in_data_report
     enumerate( T&& _iterable ) {
         struct iterator
         {
-            size_t i;
+            uinteger i;
             TIter  iter;
 
             bool operator!=( const iterator& other ) const { return iter != other.iter; }
@@ -1428,7 +1428,7 @@ namespace burn_in_data_report
     }
     inline BSTR
     wstring_bstr_convert( const std::wstring_view wstr ) {
-        return SysAllocStringLen( wstr.data(), wstr.size() );
+        return SysAllocStringLen( wstr.data(), static_cast<UINT>(wstr.size()) );
     }
     inline BSTR
     string_bstr_convert( const std::string_view str ) {
@@ -1465,7 +1465,7 @@ namespace burn_in_data_report
         SAFEARRAYBOUND bounds[2];
         bounds[1].cElements = 1;
         bounds[1].lLbound = 0;
-        bounds[0].cElements = data.size();
+        bounds[0].cElements = static_cast<ULONG>(data.size());
         bounds[0].lLbound = 0;
         CComSafeArray<To> sa_result( bounds, 2 );
 
@@ -1473,7 +1473,7 @@ namespace burn_in_data_report
         indexes[1] = 0;
 
         for ( const auto& [i, x] : enumerate(data) ) {
-            indexes[0] = i;
+            indexes[0] = static_cast<ULONG>(i);
             sa_result.MultiDimSetAt( indexes, conversion_op(x) );
         }
 
