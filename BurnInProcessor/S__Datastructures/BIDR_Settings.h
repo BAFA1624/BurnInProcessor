@@ -44,9 +44,7 @@ namespace burn_in_data_report
 
         void set_start_time( const std::chrono::sys_time<nano>& start_time ) noexcept { start_time_ = start_time; }
 
-        void set_measurement_period( const nano& measurement_period ) noexcept {
-            measurement_period_ = measurement_period;
-        }
+        void set_measurement_period( const nano& measurement_period ) noexcept { measurement_period_ = measurement_period; }
 
         void set_data_pos( const uinteger& data_pos ) noexcept { data_pos_ = data_pos; }
 

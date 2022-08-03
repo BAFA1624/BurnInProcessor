@@ -143,6 +143,11 @@ namespace burn_in_data_report
 
         [[nodiscard]] bool
         clear_changes() noexcept;
+
+        [[nodiscard]] auto
+        get_file_boundaries() const noexcept { return file_.get_file_boundaries(); }
+        [[nodiscard]] auto&
+        file_boundaries() noexcept { return file_.file_boundaries(); }
     };
 
 

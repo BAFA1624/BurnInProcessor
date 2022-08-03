@@ -39,8 +39,8 @@ constexpr auto wfmt{ L"%lld" };
 #else
 using integer = int32_t;
 using uinteger = uint32_t;
-constexpr auto fmt = "%d";
-constexpr auto wfmt = L"%d";
+constexpr auto fmt{ "%d" };
+constexpr auto wfmt{ L"%d" };
 #endif
 
 // Ensure 64-bit double
@@ -128,9 +128,9 @@ namespace burn_in_data_report
     using milli = std::chrono::duration<std::int64_t, std::milli>;
     using kilo = std::chrono::duration<std::int64_t, std::kilo>;
 
-    using dnano = std::chrono::duration<long double, std::nano>;
-    using dnanocentury = std::chrono::duration<long double, mul<std::hecto, std::nano>>;
-    using dmicro = std::chrono::duration<long double, std::micro>;
+    using dnano = std::chrono::duration<double, std::nano>;
+    using dnanocentury = std::chrono::duration<double, mul<std::hecto, std::nano>>;
+    using dmicro = std::chrono::duration<double, std::micro>;
 
     // Vector of { column title : data vector } pairs
     template <typename T>
@@ -141,6 +141,19 @@ namespace burn_in_data_report
 
     using range_t = std::pair<uinteger, uinteger>;
     using indices_t = std::vector<range_t>;
+
+#pragma pack(4)
+    struct file_boundary_t
+    {
+        using clock=std::chrono::system_clock;
+        using timepoint=std::chrono::time_point<clock, nano>;
+
+        integer index;
+        std::string file_path;
+        nano internal_time;
+        timepoint start_time;
+    };
+#pragma pack()
 
     template <typename T>
     std::vector<T>
@@ -1328,9 +1341,7 @@ namespace burn_in_data_report
     inline std::string
     tolower( const std::string_view& s ) {
         std::string result;
-        for ( const char& c : s ) {
-            result.push_back(std::tolower(c));
-        }
+        for ( const char& c : s ) { result.push_back(std::tolower(c)); }
         return result;
     }
 
@@ -1542,8 +1553,7 @@ namespace burn_in_data_report
     template <typename R, typename... T>
     using gen_func = std::function<R(T...)>;
 
-    template <typename R, typename... Args>
-    R
+    template <typename R, typename... Args> R
     type_switch(const gen_func<R, Args...>& f, const DataType& dtype, Args... args) {
         R result;
         switch ( dtype ) {
@@ -1564,6 +1574,24 @@ namespace burn_in_data_report
         }
         }
         return result;
+    }
+
+    using dur = nano;
+    using clock = std::chrono::system_clock;
+    using time_point = std::chrono::time_point<clock, dur>;
+
+    inline std::string
+    timepoint_to_string(const time_point& tp) {
+        const auto time{
+            clock::to_time_t(std::chrono::time_point_cast<clock::duration>(tp))
+        };
+        const auto time_str = new char[26];
+        ctime_s(time_str, 26, &time);
+        return std::string{ time_str };
+    }
+    inline BSTR
+    timepoint_to_bstr(const time_point& tp) {
+        return string_bstr_convert(timepoint_to_string(tp));
     }
 
 } // namespace burn_in_data_report

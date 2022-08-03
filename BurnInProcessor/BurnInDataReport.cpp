@@ -78,6 +78,7 @@ init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
         write_log("Initializing spreadsheet...");
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
                              max_off_time_minutes, do_trimming == FALSE ? false : true);
+        write_log(std::format("<init_spreadsheet> get_file_boundaries(): {}, file_boundaries().size(): {}", spreadsheet.get_file_boundaries().size(), spreadsheet.file_boundaries().size()));
         write_log("");
         return result;
     }
@@ -495,6 +496,24 @@ clear_changes() {
     catch ( const std::exception& err ) {
         write_err_log( err, "DLL: <clear_changes>" );
         return FALSE;
+    }
+}
+
+LPSAFEARRAY WINAPI
+file_boundaries() {
+    try {
+        write_log("Entered file_boundaries");
+
+        const auto& boundaries{ spreadsheet.get_file_boundaries() };
+
+        write_log(std::format("boundaries.size(): {}", boundaries.size()));
+
+        if ( boundaries.empty() ) { return nullptr }
+    }
+    catch ( const std::exception& err ) {
+        write_log("sdlkgdsklg");
+        write_err_log(err, "DLL: <file_boundaries>");
+        return SafeArrayCreateVectorEx(VT_R8, 0, 0, nullptr);
     }
 }
 

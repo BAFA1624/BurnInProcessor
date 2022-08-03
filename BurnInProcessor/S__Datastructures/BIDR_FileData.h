@@ -135,9 +135,9 @@ namespace burn_in_data_report
         * - Value(std::pair<nano, nano>): Timestamps; first is
         *   relative to the internal time representation, second
         *   is the true start time.
-        * Empty if files_.size() == 0.
+        * Empty if files_.size() = 0.
         */
-        std::map<uinteger, std::pair<nano, std::chrono::sys_time<nano>>> file_boundaries_;
+        std::vector<file_boundary_t> file_boundaries_;
         // Controls whether detected test failures are trimmed from the data.
         bool do_trimming_;
 
@@ -363,6 +363,9 @@ namespace burn_in_data_report
 
         [[nodiscard]] std::vector<bool> get_load_info() const noexcept { return success_; }
 
+        [[nodiscard]] auto get_file_boundaries() const noexcept { return file_boundaries_; }
+        [[nodiscard]] auto& file_boundaries() noexcept { return file_boundaries_; }
+
         bool
         contains( const std::string& key ) const noexcept { return get_col_types().contains(key); }
 
@@ -434,6 +437,7 @@ namespace burn_in_data_report
         header_max_sz_ = _other.header_max_sz_;
         max_off_time_ = _other.max_off_time_;
         internal_time_ = _other.internal_time_;
+        file_boundaries_ = _other.file_boundaries_;
         do_trimming_ = _other.do_trimming_;
 
         return *this;
@@ -467,6 +471,7 @@ namespace burn_in_data_report
         header_max_sz_ = _other.header_max_sz_;
         max_off_time_ = _other.max_off_time_;
         internal_time_ = _other.internal_time_;
+        file_boundaries_ = _other.file_boundaries_;
         do_trimming_ = _other.do_trimming_;
 
         return *this;
@@ -822,7 +827,12 @@ namespace burn_in_data_report
                                                  std::ref(file_lines_[i])));
                 }
             }
-            for ( uinteger i = 0; i < files_.size(); ++i ) { success_[i] = (success_[i] && futures[i].get()); }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( !futures[i].get() ) {
+                    write_log(std::format("<text_to_lines> failed for {}", files_[i].path().string()));
+                    success_[i] = false;
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -1074,17 +1084,20 @@ namespace burn_in_data_report
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
-
-                    if ( success_[i] ) {
+                    if ( !futures[i].get() ) {
+                        write_log(std::format("<parse_file_type> failed to parse {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                    else {
                         settings_[i].set_config(configs[i]);
                         settings_[i].set_format(FileFormat(configs[i].at("name"), configs[i]));
                     }
                 }
             }
 
-            if ( !check_valid_state(success_) )
+            if ( !check_valid_state(success_) ) {
                 return false;
+            }
 
             return true;
         }
@@ -1102,16 +1115,14 @@ namespace burn_in_data_report
 
             // Launch thread checking for header limit of each file.
             for ( uinteger i = 0; i < files_.size(); ++i ) {
-                if ( success_[i] ) // Only launch if file has been successfully loaded so
-                // far.
-                {
+                // Only continue if sucessfully loaded so far
+                if ( success_[i] ) {
                     // get config -> regex pattern & get maximum header limit set in
                     // spreadsheet.
                     nlohmann::json config = settings_[i].get_config();
                     auto pattern = std::regex(config.at("header_identifier"));
                     header_lims[i] = settings_[i].get_headermaxlim();
 
-                    // Launch async process executing line_check function
                     futures[i] =
                         std::async(
                             static_cast<bool(*)(const std::vector<std::string_view>&, const std::regex&, uinteger&)>(line_check),
@@ -1128,6 +1139,7 @@ namespace burn_in_data_report
                     }
                     // process failed
                     else {
+                        write_log(std::format("<header_halt_scan> failed in {}", files_[i].path().string()));
                         settings_[i].set_header_lim(0);
                         success_[i] = false;
                     }
@@ -1210,7 +1222,7 @@ namespace burn_in_data_report
 #endif
             // get interval period
             if ( method == "in_header" ) {
-                const std::regex incr_pattern = params.at("re_pattern");
+                const std::regex incr_pattern{ params.at("re_pattern").get<std::string>() };
                 if ( line_capture(lines, increment_matches, incr_pattern,
                                   settings.get_header_lim()) ) {
                     const nano incr_time =
@@ -1263,7 +1275,14 @@ namespace burn_in_data_report
                 }
             }
 
-            for ( uinteger i = 0; i < files_.size(); ++i ) { if ( success_[i] ) { success_[i] = future[i].get(); } }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( success_[i] ) {
+                    if ( !future[i].get() ) {
+                        write_log(std::format("<time_stamp_scan> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -1318,8 +1337,9 @@ namespace burn_in_data_report
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
-                    for ( const auto& [title, type] : settings_[i].col_types() ) {
+                    if ( !futures[i].get() ) {
+                        write_log(std::format("<column_title_scan> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
                     }
                 }
             }
@@ -1688,7 +1708,10 @@ namespace burn_in_data_report
             }
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
+                    if ( !futures[i].get() ) {
+                        write_log(std::format("<parse_data> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
                 }
             }
 
@@ -1911,8 +1934,12 @@ namespace burn_in_data_report
                 }
             }
             for ( uinteger i { 0 }; i < files_.size(); ++i ) {
-                if ( success_[i] )
-                    success_[i] = futures[i].get();
+                if ( success_[i] ) {
+                    if ( !futures[i].get() ) {
+                        write_log(std::format("<trim_data> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                }
             }
 
             if ( !check_valid_state(success_) )
@@ -2276,25 +2303,21 @@ namespace burn_in_data_report
             uinteger pos { 0 };
             auto current_time { nano::zero() };
             for ( const auto& [i, settings] : enumerate(settings_) ) {
-                /*
-                * Add record of file boundary
-                */
-                file_boundaries_[i] = std::pair { current_time, settings.get_start_time() };
-                /*
-                * It isn't guaranteed that all the files have the same
-                * measurement interval, so we need to check for that.
-                */
                 const nano& interval = settings.get_measurement_period();
-                const uinteger& n = settings.get_n_rows();
-                for ( uinteger j { 0 }; j < n; ++j ) {
+                for ( uinteger j { 0 }; j < settings.get_n_rows(); ++j ) {
                     internal_time_[pos++] = current_time;
                     current_time += interval;
                 }
+
+                /*
+                * Add record of file boundary
+                */
+                file_boundaries_.emplace_back(file_boundary_t(i, files_[i].path().string(), current_time, settings.get_start_time()));
+                write_log(std::format("file boundary: {}, {}, {}, {}", i, files_[i].path().string(), current_time, settings.get_start_time()));
             }
             auto& cols{ col_types() };
             cols["Combined Time"] = DataType::DOUBLE;
             doubles_["Combined Time"] = get_internal_time_double();
-            assert(pos == n_rows);
 
             /*
             * Iterate through (col, type) pairs
@@ -2363,7 +2386,7 @@ namespace burn_in_data_report
                     switch ( type ) {
                     case DataType::INTEGER:
                         concat_vals(file_ints_[j], ints_, title, type, ints_lens_[j],
-                                   statistics_[j], static_cast<integer>(0));
+                                   statistics_[j], 0);
                         break;
                     case DataType::DOUBLE:
                         concat_vals(file_doubles_[j], doubles_, title, type, doubles_lens_[j],

@@ -56,14 +56,12 @@ extern "C"
      *   - contains: DONE
     */
 
-    // Load selected files
-    // Not sure I want to export this
-    /*BIDR_API bool WINAPI
+    BIDR_API BOOL WINAPI
     load_files( _In_ const LPSAFEARRAY* ppsa,
                 _In_ LPVARIANT          raw_config_loc_name,
                 _In_ const uinteger&    max_header_sz,
                 _In_ const double&      max_off_time_minutes,
-                _In_ const bool&        do_trimming );*/
+                _In_ const bool&        do_trimming );
 
     // Clear spreadsheet, then load new files
     BIDR_API BOOL WINAPI
@@ -141,13 +139,19 @@ extern "C"
     BIDR_API BOOL WINAPI
     clear_changes();
 
-    /*
-     * Loading columns seems to work once then not again
-     * after unloading?
-     *
-     * I think there is an issue with unload_column(...)
-     * Maybe not being removed from type_map_?
-     */
+    struct file_boundary
+    {
+        integer index;
+        integer internal_time;
+        VARIANT start_time;
+        VARIANT file_path;
+    };
+
+    typedef file_boundary FBOUNDARY;
+    typedef FBOUNDARY* LPFBOUNDARY;
+
+    BIDR_API LPSAFEARRAY WINAPI
+    file_boundaries();
 
     /*
      * Check functionality:
