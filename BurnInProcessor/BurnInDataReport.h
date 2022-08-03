@@ -139,16 +139,6 @@ extern "C"
     BIDR_API BOOL WINAPI
     clear_changes();
 
-    struct file_boundary
-    {
-        integer index;
-        integer internal_time;
-        VARIANT start_time;
-        VARIANT file_path;
-    };
-
-    typedef file_boundary FBOUNDARY;
-    typedef FBOUNDARY* LPFBOUNDARY;
 
     BIDR_API LPSAFEARRAY WINAPI
     file_boundaries();
