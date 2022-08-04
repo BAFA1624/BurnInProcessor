@@ -2303,17 +2303,17 @@ namespace burn_in_data_report
             uinteger pos { 0 };
             auto current_time { nano::zero() };
             for ( const auto& [i, settings] : enumerate(settings_) ) {
+                /*
+                * Add record of file boundary
+                */
+                file_boundaries_.emplace_back(file_boundary_t(static_cast<uinteger>(i), files_[i].path().filename().string(), current_time, settings.get_start_time()));
+                write_log(std::format("file boundary: {}, {}, {}, {}", i, files_[i].path().filename().string(), current_time.count(), settings.get_start_time()));
+
                 const nano& interval = settings.get_measurement_period();
                 for ( uinteger j { 0 }; j < settings.get_n_rows(); ++j ) {
                     internal_time_[pos++] = current_time;
                     current_time += interval;
                 }
-
-                /*
-                * Add record of file boundary
-                */
-                file_boundaries_.emplace_back(file_boundary_t(static_cast<uinteger>(i), files_[i].path().string(), current_time, settings.get_start_time()));
-                write_log(std::format("file boundary: {}, {}, {}, {}", i, files_[i].path().string(), current_time, settings.get_start_time()));
             }
             auto& cols{ col_types() };
             cols["Combined Time"] = DataType::DOUBLE;

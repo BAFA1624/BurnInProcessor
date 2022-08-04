@@ -40,9 +40,20 @@ namespace burn_in_data_report
     inline std::string
     short_path( const std::filesystem::path& root,
                 const std::filesystem::path& path ) {
-        const uinteger root_len{ static_cast<uinteger>(root.string().size()) };
-        const uinteger path_len{ static_cast<uinteger>(path.string().size()) };
-        assert(root_len < path_len);
-        return path.string().substr(root_len, path_len);
+        try {
+            const uinteger root_len{ static_cast<uinteger>(root.string().size()) };
+            const uinteger path_len{ static_cast<uinteger>(path.string().size()) };
+            if ( root_len < path_len ) {
+                throw
+                    std::runtime_error("Root filepath length < full filepath length.");
+            }
+            assert(root_len < path_len);
+            return path.string().substr(root_len, path_len);
+        }
+        catch ( const std::exception& err ) {
+            write_err_log(err, "<short_path>");
+            return std::string{ "" };
+        }
     }
+
 }

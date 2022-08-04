@@ -525,7 +525,7 @@ file_boundaries() {
 
         for ( const auto& [i, b] : enumerate(boundaries) ) {
             temp_str.emplace_back(
-                                  std::format("{},{},{},{}", b.index, b.file_path, b.internal_time, b.start_time)
+                                  std::format("{},{},{},{}", b.index, b.file_name, b.internal_time, b.start_time)
                                  );
         }
 

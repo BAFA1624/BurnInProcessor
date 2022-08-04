@@ -1,5 +1,7 @@
 #pragma once
 
+//ba556@bath.ac.uk
+
 // C++ std library files
 #include <bitset>
 #include <chrono>
@@ -149,7 +151,7 @@ namespace burn_in_data_report
         using timepoint=std::chrono::time_point<clock, nano>;
 
         integer index;
-        std::string file_path;
+        std::string file_name;
         nano internal_time;
         timepoint start_time;
     };
@@ -255,89 +257,6 @@ namespace burn_in_data_report
                 "_end, etc.";
         }
     };
-
-
-/*
-    static double
-    median( const std::vector<integer>& _v ) {
-        if ( _v.empty() )
-            throw median_of_empty_list_exception();
-
-        auto tmp = _v;
-
-        const auto n = _v.size() / 2;
-        std::ranges::nth_element(tmp.begin(), tmp.begin() + n, tmp.end());
-        double med = static_cast<double>(tmp[n]);
-
-        if ( !(_v.size() & 1) ) { // _v.size() == even number
-            const auto max_it = std::max_element(tmp.begin(), tmp.begin() + n);
-            med = (*max_it + med) / 2.0;
-        }
-
-        return med;
-    }
-    static double
-    median( const std::vector<double>& _v ) {
-        if ( _v.empty() )
-            throw median_of_empty_list_exception();
-
-        auto tmp = _v;
-
-        const auto n = _v.size() / 2;
-        std::ranges::nth_element(tmp.begin(), tmp.begin() + n, tmp.end());
-        double med = tmp[n];
-
-        if ( !(_v.size() & 1) ) { // _v.size() == even number
-            const auto max_it = std::max_element(tmp.begin(), tmp.begin() + n);
-            med = (*max_it + med) / 2.0;
-        }
-
-        return med;
-    }
-
-    static double
-    median( const std::vector<integer>&  _data, const uinteger& _first,
-            const uinteger& _end ) {
-        if ( _data.empty() || (_end - _first + 1 == 0) )
-            throw median_of_empty_list_exception();
-
-        auto tmp = _data;
-
-        const auto n = (_end - _first) / 2;
-        std::ranges::nth_element(tmp.begin() + _first, tmp.begin() + _first + n,
-                         tmp.begin() + _end);
-        double med = tmp[n];
-
-        if ( !((_end - _first + 1) & 1) ) {
-            const auto max_it =
-                std::max_element(tmp.begin() + _first, tmp.begin() + _first + n);
-            med = (*max_it + med) / 2.0;
-        }
-
-        return med;
-    }
-    static double
-    median( const std::vector<double>&  _data, const uinteger& _first,
-            const uinteger& _end ) {
-        if ( _data.empty() || (_end - _first + 1 == 0) )
-            throw median_of_empty_list_exception();
-
-        auto tmp = _data;
-
-        const auto n = (_end - _first) / 2;
-        std::ranges::nth_element( tmp.begin() + _first, tmp.begin() + _first + n,
-                             tmp.begin() + _end);
-        double med = tmp[n];
-
-        if ( !((_end - _first + 1) & 1) ) {
-            const auto max_it =
-                std::max_element(tmp.begin() + _first, tmp.begin() + _first + n);
-            med = (*max_it + med) / 2.0;
-        }
-
-        return med;
-    }
-*/
 
     template <ArithmeticType T>
     static double
