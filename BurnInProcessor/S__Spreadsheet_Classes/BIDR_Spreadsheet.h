@@ -255,6 +255,8 @@ namespace burn_in_data_report
         string_data_ = other.string_data_;
         s_errors_ = other.s_errors_;
         type_map_ = other.type_map_;
+        filters_ = other.filters_;
+        ranges_ = other.ranges_;
         n_rows_ = other.n_rows_;
         reduction_type_ = other.reduction_type_;
         average_type_ = other.average_type_;
@@ -275,6 +277,8 @@ namespace burn_in_data_report
         string_data_(other.string_data_),
         s_errors_(other.s_errors_),
         type_map_(other.type_map_),
+        filters_(other.filters_),
+        ranges_(other.ranges_),
         n_rows_(other.n_rows_),
         reduction_type_(other.reduction_type_),
         average_type_(other.average_type_),
@@ -292,6 +296,8 @@ namespace burn_in_data_report
         string_data_ = std::move(other.string_data_);
         s_errors_ = std::move(other.s_errors_);
         type_map_ = std::move(other.type_map_);
+        ranges_ = std::move(other.ranges_);
+        filters_ = std::move(other.filters_);
         n_rows_ = other.n_rows_;
         reduction_type_ = other.reduction_type_;
         average_type_ = other.average_type_;
@@ -755,7 +761,7 @@ namespace burn_in_data_report
                         // Calculate num of points per grouping.
                         // If provided max. num. of points > MAX_ROWS (excel limit), default to MAX_ROWS
                         const auto n_points_arr = std::vector<uinteger>{ _n_points, MAX_ROWS, static_cast<uinteger>(data.size()) };
-                        const uinteger n_points = *std::ranges::min_element(n_points_arr.cbegin(), n_points_arr.cend());
+                        const uinteger n_points = *std::ranges::min_element(n_points_arr);
 
                         reduced_storage.clear();
                         reduced_storage.reserve( n_points );
@@ -1140,19 +1146,25 @@ namespace burn_in_data_report
             indices_t ranges;
             ranges.reserve(filter.size());
 
+            const auto sz =
+                std::accumulate(
+                    filter.cbegin(), filter.cend(),
+                    static_cast<uinteger>(0),
+                    [](const auto& lhs, const range_t& rhs)
+                    { return lhs + (rhs.second - rhs.first); }
+                );
+
+            std::vector<T> tmp;
+            tmp.reserve(sz);
+
             uinteger pos{ 0 };
             for ( const auto& [first, last] : filter ) {
-                if ( pos != first ) {
-                    std::copy(
-                        data.begin() + first,
-                        data.begin() + last,
-                        data.begin() + pos
-                    );
-                }
+                tmp.insert(tmp.cend(), data.cbegin() + first, data.cbegin() + last);
                 ranges.emplace_back(pos, pos + (last - first));
                 pos += last - first;
             }
-            data.resize(pos);
+
+            data = std::move(tmp);
 
             return ranges;
         }
@@ -1195,8 +1207,7 @@ namespace burn_in_data_report
             constexpr auto calculate_cutoff =
                 []<ArithmeticType T>
                 (const T& min, const T& max,
-                const double& fraction) -> T
-                {
+                const double& fraction) -> T {
                     const T result{ static_cast<T>(min + fraction * (max - min)) };
                     write_log(std::format("min: {}, max: {}, fraction: {}, cutoff: {}", min, max, fraction, result));
                     return result;
@@ -1410,6 +1421,9 @@ namespace burn_in_data_report
             s_errors_.clear();
 
             type_map_.clear();
+
+            filters_.clear();
+            ranges_.clear();
 
             n_rows_ = 0;
             reduction_type_ = reduction_type { 100 };
