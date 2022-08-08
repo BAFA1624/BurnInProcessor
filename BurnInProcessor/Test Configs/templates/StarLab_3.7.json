@@ -1,0 +1,23 @@
+{
+  "name": "StarLab_3.7x",
+  "file_identifier": ";PC Software:StarLab Version 3\\.7[\\d] Build [\\d]+[\\r\\s]*",
+  "header_identifier": "[ \\t]+Timestamp[ \\t]+Channel A[ \\t\\r]+",
+  "delim": "\t",
+  "titles": [ "Timestamp", "Channel A" ],
+  "types": [ 1, 1 ],
+  "start_time": {
+    "method": "InFile",
+    "params": {
+      "re_pattern": ";First Pulse Arrived : ([\\d]+/[\\d]+/[\\d]+ at [\\d]+:[\\d]+:[\\d]+)[\\r\\s]*",
+      "time_pattern": "%d/%m/%Y at %H:%M:%S"
+    }
+  },
+  "interval": {
+    "method": "InFile",
+    "params": {
+      "re_pattern": ";Log Settings:Sample:of period: ([\\d]+:[\\d]+:[\\d]+)[\\r\\s]*",
+      "time_pattern": "%H:%M:%S"
+    }
+  },
+  "trim_filter_key": "Channel A"
+}

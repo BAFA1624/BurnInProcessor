@@ -1,0 +1,22 @@
+{
+  "name": "",
+  "file_identifier": "",
+  "header_identifier": "",
+  "delim": "",
+  "titles": [],
+  "types": [],
+  "start_time": {
+    "method": "",
+    "params": {
+      "re_pattern": "",
+      "time_pattern": ""
+    }
+  },
+  "interval": {
+    "method": "",
+    "params": {
+      "re_pattern": "",
+      "time_pattern": ""
+    }
+  }
+}

@@ -14,9 +14,9 @@
 #include <string_view>
 #include <thread>
 
+#include "BIDR_StorageTypes.h"
 #include "../BIDR_Defines.h"
 #include "../F__File_Parse/BIDR_FileParse.h"
-#include "BIDR_StorageTypes.h"
 
 #include "BIDR_Timer.h"
 
@@ -79,38 +79,6 @@ namespace burn_in_data_report
         return false;
     }
 
-    template <typename T>
-    static std::vector<T>
-    apply_filter( const std::vector<T>& _data,
-                  const indices_t& _filter ) {
-        try {
-            if ( _filter.size() == 0 ) { return _data; }
-            uinteger sz = std::accumulate(
-                                          _data.cbegin(), _data.cend(), static_cast<uinteger>( 0 ),
-                                          []( uinteger a, const range_t& b ) {
-                                              return a + (b.second - b.first);
-                                          });
-            // Calculate size of new vector:
-            uinteger sz2 { 0 };
-            for ( const auto& [first, last] : _filter ) { sz2 += (last - first); }
-            assert(sz == sz2);
-            std::vector<T> result;
-            result.reserve(sz);
-
-            for ( const auto& [first, last] : _filter ) {
-                result.insert(result.end(), _data.begin() + first,
-                              _data.begin() + last);
-            }
-
-            result.shrink_to_fit();
-            return result;
-        }
-        catch ( const std::exception& err ) {
-            write_err_log(err, "DLL: <apply_filter>");
-            return std::vector<T> {};
-        }
-    }
-
 
     class file_stats
     {
@@ -145,6 +113,7 @@ namespace burn_in_data_report
         std::vector<memory_handle> handles_;   // Handles for multiple files
         std::vector<file_settings> settings_;  // Vector of settings for the files
         std::vector<bool> success_;           // Indicates successful parses
+        std::vector<std::string> failed_loads_;
         IMap ints_;                           // Map of col. title --> std::vec<ints>
         DMap doubles_;                // Map of col. title --> std::vec<doubles>
         SMap strings_;                // Map of col. title --> std::vec<strings>
@@ -167,9 +136,9 @@ namespace burn_in_data_report
         * - Value(std::pair<nano, nano>): Timestamps; first is
         *   relative to the internal time representation, second
         *   is the true start time.
-        * Empty if files_.size() == 0.
+        * Empty if files_.size() = 0.
         */
-        std::map<uinteger, std::pair<nano, std::chrono::sys_time<nano>>> file_boundaries_;
+        std::vector<file_boundary_t> file_boundaries_;
         // Controls whether detected test failures are trimmed from the data.
         bool do_trimming_;
 
@@ -225,6 +194,7 @@ namespace burn_in_data_report
             handles_({}),
             settings_({}),
             success_({}),
+            failed_loads_({}),
             ints_(),
             doubles_(),
             strings_(),
@@ -258,6 +228,7 @@ namespace burn_in_data_report
             handles_ { { memory_handle {} } },
             settings_ { { file_settings { "", 256 } } },
             success_({ true }),
+            failed_loads_({}),
             ints_ { {} },
             doubles_ { {} },
             strings_ { {} },
@@ -296,6 +267,7 @@ namespace burn_in_data_report
             handles_({}),
             settings_({}),
             success_({}),
+            failed_loads_({}),
             ints_(),
             doubles_(),
             strings_(),
@@ -344,7 +316,7 @@ namespace burn_in_data_report
 
         [[nodiscard]] IMap get_i() const noexcept {
             try { return ints_; }
-            catch ( const std::exception& err ) { write_err_log(err, std::format("DLL: <file_data::get_i>")); }
+            catch ( const std::exception& err ) { write_err_log(err, "DLL: <file_data::get_i>"); }
         }
 
         [[nodiscard]] std::vector<integer> get_i( const std::string& _key ) const noexcept {
@@ -358,7 +330,7 @@ namespace burn_in_data_report
         [[nodiscard]] DMap get_d() const noexcept {
             try { return doubles_; }
             catch ( const std::exception& err ) {
-                write_err_log(err, std::format("DLL: <file_data::get_d>"));
+                write_err_log(err, "DLL: <file_data::get_d>");
                 return DMap {};
             }
         }
@@ -374,7 +346,7 @@ namespace burn_in_data_report
         [[nodiscard]] SMap get_s() const noexcept {
             try { return strings_; }
             catch ( const std::exception& err ) {
-                write_err_log(err, std::format("DLL: <file_data::get_d>"));
+                write_err_log(err, "DLL: <file_data::get_d>");
                 return SMap {};
             }
         }
@@ -394,6 +366,13 @@ namespace burn_in_data_report
         [[nodiscard]] std::vector<SMap> get_vs() const noexcept { return file_strings_; }
 
         [[nodiscard]] std::vector<bool> get_load_info() const noexcept { return success_; }
+        [[nodiscard]] auto get_failed_loads() const noexcept { return failed_loads_; }
+
+        [[nodiscard]] auto get_file_boundaries() const noexcept { return file_boundaries_; }
+        [[nodiscard]] auto& file_boundaries() noexcept { return file_boundaries_; }
+
+        bool
+        contains( const std::string& key ) const noexcept { return get_col_types().contains(key); }
 
         bool
         add_file( const std::filesystem::directory_entry& file ) noexcept;
@@ -450,6 +429,7 @@ namespace burn_in_data_report
         handles_ = _other.handles_;
         settings_ = _other.settings_;
         success_ = _other.success_;
+        failed_loads_ = _other.failed_loads_;
         ints_ = _other.ints_;
         doubles_ = _other.doubles_;
         strings_ = _other.strings_;
@@ -463,6 +443,7 @@ namespace burn_in_data_report
         header_max_sz_ = _other.header_max_sz_;
         max_off_time_ = _other.max_off_time_;
         internal_time_ = _other.internal_time_;
+        file_boundaries_ = _other.file_boundaries_;
         do_trimming_ = _other.do_trimming_;
 
         return *this;
@@ -483,6 +464,7 @@ namespace burn_in_data_report
         handles_ = _other.handles_;
         settings_ = _other.settings_;
         success_ = _other.success_;
+        failed_loads_ = _other.failed_loads_;
         ints_ = _other.ints_;
         doubles_ = _other.doubles_;
         strings_ = _other.strings_;
@@ -496,6 +478,7 @@ namespace burn_in_data_report
         header_max_sz_ = _other.header_max_sz_;
         max_off_time_ = _other.max_off_time_;
         internal_time_ = _other.internal_time_;
+        file_boundaries_ = _other.file_boundaries_;
         do_trimming_ = _other.do_trimming_;
 
         return *this;
@@ -523,23 +506,23 @@ namespace burn_in_data_report
                 return true;
             };
 
-            adjust_size(encodings_, files_.size(), encoding_type::UNKNOWN);
-            adjust_size(handles_, files_.size(), memory_handle {});
-            adjust_size(settings_, files_.size(),
+            adjust_size(encodings_, static_cast<uinteger>(files_.size()), encoding_type::UNKNOWN);
+            adjust_size(handles_, static_cast<uinteger>(files_.size()), memory_handle {});
+            adjust_size(settings_, static_cast<uinteger>(files_.size()),
                         file_settings { std::string(""), header_max_sz_ });
-            adjust_size(success_, files_.size(), true);
-            adjust_size(file_lines_, files_.size(), {});
-            adjust_size(file_ints_, files_.size(), IMap {});
-            adjust_size(file_doubles_, files_.size(), DMap {});
-            adjust_size(file_strings_, files_.size(), SMap {});
-            adjust_size(ints_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(doubles_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(strings_lens_, files_.size(), static_cast<uinteger>( 0 ));
-            adjust_size(statistics_, files_.size(), file_stats {});
+            adjust_size(success_, static_cast<uinteger>(files_.size()), true);
+            adjust_size(file_lines_, static_cast<uinteger>(files_.size()), {});
+            adjust_size(file_ints_, static_cast<uinteger>(files_.size()), IMap {});
+            adjust_size(file_doubles_, static_cast<uinteger>(files_.size()), DMap {});
+            adjust_size(file_strings_, static_cast<uinteger>(files_.size()), SMap {});
+            adjust_size(ints_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(doubles_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(strings_lens_, static_cast<uinteger>(files_.size()), static_cast<uinteger>( 0 ));
+            adjust_size(statistics_, static_cast<uinteger>(files_.size()), file_stats {});
 
             Timer t;
             if ( !this->async_get_files() ) { // Retrieve file
-                write_err_log(std::runtime_error(err_msg), "FATAL ERROR: Failed to retreive files.");
+                write_err_log(std::runtime_error(err_msg), "FATAL ERROR: Failed to retrieve files.");
                 return false;
             }
             write_log(std::format(" - Files retrieved in {} seconds.", t.elapsed()));
@@ -712,13 +695,17 @@ namespace burn_in_data_report
         try {
             std::vector<std::future<memory_handle>> futures(files_.size());
 
-            for ( uinteger i = 0; i < files_.size(); ++i ) { futures[i] = std::async(get_file, std::cref(files_[i])); }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                futures[i] = std::async(get_file, std::cref(files_[i]));
+            }
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
                     handles_[i] = futures[i].get();
-                    if ( !handles_[i]._data )
+                    if ( !handles_[i]._data ) {
+                        failed_loads_.push_back(std::format("{}: Failed to load file.", files_[i].path().string()));
                         success_[i] = false;
+                    }
                 }
             }
 
@@ -752,7 +739,7 @@ namespace burn_in_data_report
             print("- Checking encoding type: " + encoding_string.at(type), 4);
 #endif
             _handle.get(chars, _handle._data,
-                        encode_arr.size()); // get x chars to compare against
+                        static_cast<uinteger>(encode_arr.size())); // get x chars to compare against
             if ( !chars )                    // Failed break out & return default
             {
                 break;
@@ -784,12 +771,8 @@ namespace burn_in_data_report
             _encoding = find_encoding_type(_handle);
 
             if ( _encoding != encoding_type::UNKNOWN ) {
-#ifdef DEBUG
-                print("- Encoding found: " + encoding_string.at(_encoding) +
-                      ", adjusting...",
-                      3);
-#endif
-                const uinteger offset = encoding_bom.at(_encoding).size();
+                write_log("- Encoding found: " + encoding_string.at(_encoding) + ", adjusting..." );
+                const uinteger offset{ static_cast<uinteger>(encoding_bom.at( _encoding ).size()) };
                 tmp_data = new char[access_checked(_handle._sz - offset)];
 
                 _handle.get(tmp_data, offset, _handle._sz);
@@ -799,18 +782,18 @@ namespace burn_in_data_report
 
                 _handle._data = tmp_data;
             }
+
+            return true;
         }
         catch ( const std::exception& err ) {
             write_err_log(err, "DLL: <file_data::encode_adjust_file>");
             _encoding = encoding_type::UNKNOWN;
             _handle.free();
 
-            if ( tmp_data )
-                delete[] tmp_data;
+            delete[] tmp_data;
 
             return false;
         }
-        return true;
     }
 
     // Scan & account for encoding
@@ -830,7 +813,14 @@ namespace burn_in_data_report
                 }
             }
 
-            for ( uinteger i = 0; i < files_.size(); ++i ) { if ( success_[i] ) { success_[i] = futures[i].get(); } }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( success_[i] ) {
+                    success_[i] = futures[i].get();
+                    if ( !success_[i] ) {
+                        failed_loads_.push_back(std::format("{}: Failed to adjust file encoding.", files_[i].path().string()));
+                    }
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -855,7 +845,13 @@ namespace burn_in_data_report
                                                  std::ref(file_lines_[i])));
                 }
             }
-            for ( uinteger i = 0; i < files_.size(); ++i ) { success_[i] = (success_[i] && futures[i].get()); }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( !futures[i].get() ) {
+                    failed_loads_.push_back(std::format("{}: Failed to convert text to lines.", files_[i].path().string()));
+                    write_log(std::format("<text_to_lines> failed for {}", files_[i].path().string()));
+                    success_[i] = false;
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -876,19 +872,28 @@ namespace burn_in_data_report
     // Also delimiters, etc.
     inline bool
     file_data::async_process_files() noexcept {
-        Timer t;
+        Timer t, t2;
         if ( !async_text_to_lines() ) { return false; }
+        write_log(std::format("     - text_to_lines completed in {} seconds.", t.elapsed()));
+        t.reset();
         // Scan for file style, e.g Starlabs .txt or normal .csv style.
         if ( !async_parse_file_type(config_loc_) ) { return false; }
+        write_log(std::format("     - parse file parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_header_halt_scan() ) { return false; }
+        write_log(std::format("     - header halt parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_time_stamp_scan() ) { return false; }
+        write_log(std::format("     - time stamp parsed in {} seconds.", t.elapsed()));
+        t.reset();
         if ( !async_column_title_scan() ) { return false; }
-        write_log(std::format("   - Header info parsed in {} seconds.", t.elapsed()));
+        write_log(std::format("     - column titles parsed in {} seconds.", t.elapsed()));
+        write_log(std::format("   - Header info parsed in {} seconds.", t2.elapsed()));
         t.reset();
         if ( !async_parse_data() ) { return false; }
         write_log(std::format("   - Data parsed in {} seconds.", t.elapsed()));
+        t2.reset();
         t.reset();
-        const Timer t2;
         if ( !async_trim_data() ) { return false; }
         write_log(std::format("     - Data trimmed in {} seconds.", t.elapsed()));
         if ( !async_combine_data() ) { return false; }
@@ -967,40 +972,43 @@ namespace burn_in_data_report
     }
 
     static bool
-    verify_configs( const std::map<std::string, nlohmann::json>& _configs,
+    verify_configs( const std::unordered_map<std::string, nlohmann::json>& _configs,
                     const std::vector<std::string_view>& lines,
                     const uinteger& _header_lim,
                     nlohmann::json& _result ) {
         try {
             for ( auto& [name, config] : _configs ) {
-#ifdef DEBUG
                 write_log(std::format("\t- Checking: {}", name));
-#endif
                 std::string pattern_string;
-                try { pattern_string = config.at("file_identifier").get<std::string>(); }
+                try {
+                    pattern_string = config.at("file_identifier").get<std::string>();
+                }
                 catch ( [[maybe_unused]] const std::exception& err ) {
                     write_log(std::format("DLL: <verify_configs> Invalid config detected -> {}", name));
                     continue;
                 }
 
-                if ( uinteger x { _header_lim }; line_check(lines, pattern_string, x) ) {
-#ifdef DEBUG
-                    print("Success.", 4);
-#endif
-                    write_log(std::format("     - Config matched: {}", name));
-                    _result = config;
-                    return true;
+                try {
+                    if ( uinteger x{ _header_lim }; line_check(lines, pattern_string, x) ) {
+                        write_log(std::format("\t\t- Config matched: {}", name));
+                        _result = config;
+                        return true;
+                    }
+                    else {
+                        write_log(std::format("\t\t- No match ({})", name));
+                    }
+                }
+                catch ( const std::exception& err ) {
+                    write_log(std::format("Error parsing {}: {}", name, err.what()));
                 }
             }
 
-#ifdef DEBUG
-            print("Failure.", 4);
-#endif
+            write_log("No matching config found.");
             _result = nlohmann::json::parse("{}");
             return false;
         }
         catch ( const std::exception& err ) {
-            write_err_log(err, std::format("DLL: <verify_configs>"));
+            write_err_log(err, "DLL: <verify_configs>");
             return false;
         }
     }
@@ -1028,7 +1036,9 @@ namespace burn_in_data_report
                     else if ( const auto extension { filename.substr(f_extension_pos, filename.length()) };
                         extension == ".json" ) {
                         nlohmann::json config;
-                        if ( parse_json(entry, config) ) { _storage.push_back(config); }
+                        if ( parse_json(entry, config) ) {
+                            _storage.push_back(config);
+                        }
                     }
                 }
 
@@ -1054,9 +1064,10 @@ namespace burn_in_data_report
     inline bool
     file_data::async_parse_file_type( const std::filesystem::path& _configPath ) {
         try {
-            std::map<std::string, nlohmann::json> potential_configs {};
+            std::unordered_map<std::string, nlohmann::json> potential_configs {};
             std::vector<nlohmann::json> ext_configs;
 
+            // Retrieve configs
             if ( !retrieve_ext_configs(_configPath, ext_configs) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_parse_file_type> \"retrieve_ext_configs\" failed"));
                 return false;
@@ -1081,30 +1092,32 @@ namespace burn_in_data_report
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    futures[i] = std::async(
-                                            verify_configs, potential_configs, std::cref(file_lines_[i]),
-                                            settings_[i].get_headermaxlim(), std::ref(configs[i]));
+                    futures[i] =
+                        std::async(
+                            verify_configs,
+                            std::cref(potential_configs), std::cref(file_lines_[i]),
+                            std::cref(settings_[i].get_headermaxlim()), std::ref(configs[i])
+                        );
                 }
             }
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
-
-                    if ( success_[i] ) {
+                    if ( !futures[i].get() ) {
+                        failed_loads_.push_back(std::format("{}: Failed to parse file type.", files_[i].path().string()));
+                        write_log(std::format("<parse_file_type> failed to parse {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                    else {
                         settings_[i].set_config(configs[i]);
                         settings_[i].set_format(FileFormat(configs[i].at("name"), configs[i]));
-#ifdef DEBUG
-                        print("LOGGING CONFIG: " +
-                              std::string(settings_[i].get_config().dump()),
-                              4);
-#endif
                     }
                 }
             }
 
-            if ( !check_valid_state(success_) )
+            if ( !check_valid_state(success_) ) {
                 return false;
+            }
 
             return true;
         }
@@ -1122,30 +1135,32 @@ namespace burn_in_data_report
 
             // Launch thread checking for header limit of each file.
             for ( uinteger i = 0; i < files_.size(); ++i ) {
-                if ( success_[i] ) // Only launch if file has been successfully loaded so
-                // far.
-                {
+                // Only continue if sucessfully loaded so far
+                if ( success_[i] ) {
                     // get config -> regex pattern & get maximum header limit set in
                     // spreadsheet.
                     nlohmann::json config = settings_[i].get_config();
                     auto pattern = std::regex(config.at("header_identifier"));
                     header_lims[i] = settings_[i].get_headermaxlim();
 
-                    // Launch async process executing line_check function
-                    futures[i] = std::async(
-                                            static_cast<bool (*)( const std::vector<std::string_view>&,
-                                                                  const std::regex&, uinteger& )>( line_check ),
-                                            std::cref(file_lines_[i]), pattern, std::ref(header_lims[i]));
+                    futures[i] =
+                        std::async(
+                            static_cast<bool(*)(const std::vector<std::string_view>&, const std::regex&, uinteger&)>(line_check),
+                            std::cref(file_lines_[i]), pattern, std::ref(header_lims[i])
+                        );
                 }
             }
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
                     // Set header limit to start of data
-                    if ( futures[i].get() )
+                    if ( futures[i].get() ) {
                         settings_[i].set_header_lim(header_lims[i] + 1);
+                    }
                     // process failed
                     else {
+                        failed_loads_.push_back(std::format("{}: Failed to parse header info.", files_[i].path().string()));
+                        write_log(std::format("<header_halt_scan> failed in {}", files_[i].path().string()));
                         settings_[i].set_header_lim(0);
                         success_[i] = false;
                     }
@@ -1168,19 +1183,16 @@ namespace burn_in_data_report
                      const std::vector<std::string_view>& lines,
                      file_settings& settings ) noexcept {
         try {
-            auto file_write_time =
-                std::chrono::sys_time<nano>(get_file_write_time<nano>(file));
+            const auto file_write_time =
+                std::chrono::sys_time<nano>{ get_file_write_time<nano>(file) };
             settings.set_last_write(file_write_time);
 
             std::string method = settings.get_config().at("start_time").at("method");
             auto& params = settings.get_config().at("start_time").at("params");
             std::vector<std::string> start_matches, increment_matches;
 
-#ifdef DEBUG
-            print(std::format("Checking test start time:\n"), 4);
-#endif
             // get test start time
-            if ( method == "InFile" ) {
+            if ( method == "in_header" ) {
                 const std::regex start_pattern = params.at("re_pattern");
                 if ( line_capture(lines, start_matches, start_pattern,
                                   settings.get_header_lim()) ) {
@@ -1191,33 +1203,47 @@ namespace burn_in_data_report
                     settings.set_start_time(start_time);
                 }
             }
-            else if ( method == "InFilePath" ) {
+            else if ( method == "in_file_path" ) {
                 const std::regex start_pattern = params.at("re_pattern");
                 std::smatch match;
                 std::string path_str { file.path().string() };
                 if ( std::regex_search(path_str, match, start_pattern) ) {
                     const std::chrono::sys_time<nano> start_time =
                         time_format(match.str(), std::string { params.at("time_pattern") },
-                                    std::chrono::system_clock::time_point {});
+                                    std::chrono::system_clock::time_point{});
                     settings.set_start_time(start_time);
                 }
             }
+            else if ( method == "in_data" ) {
+                // Parse start time from first line of data
+                const auto& delim{ settings.get_config().at("delim").get<std::string>() };
+                const auto& data{ lines[settings.get_header_lim()] };
+                const auto& split_data{ split_str(data, delim) };
+                const auto& start_time_str{ trim(split_data[params.at("col_index").get<uinteger>()]) };
+
+                settings.set_start_time(
+                    time_format(start_time_str, params.at("time_pattern").get<std::string>(),
+                        std::chrono::system_clock::time_point{}
+                    )
+                );
+            }
             else {
                 // Some sort of failure
+                throw std::runtime_error("<time_stamp_scan> Unknown test start time scanning method.");
             }
 #ifdef DEBUG
-            print(std::format("Finished, start time: {}.\n", settings.get_start_time()), 4);
+            write_log(std::format("Finished, start time: {}.\n", settings.get_start_time()));
 #endif
 
             method = settings.get_config().at("interval").at("method").get<std::string>();
             params = settings.get_config().at("interval").at("params");
 
 #ifdef DEBUG
-            print(std::format("Checking interval:\n"), 4);
+            write_log("Checking interval:\n");
 #endif
             // get interval period
-            if ( method == "InFile" ) {
-                const std::regex incr_pattern = params.at("re_pattern");
+            if ( method == "in_header" ) {
+                const std::regex incr_pattern{ params.at("re_pattern").get<std::string>() };
                 if ( line_capture(lines, increment_matches, incr_pattern,
                                   settings.get_header_lim()) ) {
                     const nano incr_time =
@@ -1227,32 +1253,27 @@ namespace burn_in_data_report
                 }
             }
             else if ( method == "value" ) {
-                using seconds = std::chrono::duration<integer, std::ratio<1i64>>;
-                const seconds incr_time { params.at("increment").get<integer>() };
-                settings.set_measurement_period(incr_time);
+                using seconds = std::chrono::duration<double, std::ratio<1i64>>;
+                const seconds incr_time { params.at("increment").get<double>() };
+                settings.set_measurement_period(std::chrono::duration_cast<nano>(incr_time));
             }
-            else if ( method == "Automatic" ) {
+            else if ( method == "automatic" ) {
                 if ( !is_in(params.at("title").get<std::string>(),
                             settings.get_config().at("titles").get<std::vector<std::string>>()) ) {
-                    std::runtime_error
-                        err("Invalid title parsed in configuration file to automatically detect measurement interval.");
-                    throw err;
+                    throw std::runtime_error("Invalid title parsed in configuration file to automatically detect measurement interval.");
                 }
                 // Data hasn't been read in yet, interval is detected in parsing step
             }
             else {
-                std::runtime_error err(
-                                       std::format("Invalid \"interval\" method: \"{}\" received. Check for mistakes in {} configuration.",
-                                                   method,
-                                                   settings.get_config().at("name").get<std::string>())
-                                      );
-                throw err;
+                throw std::runtime_error(
+                    std::format("Invalid \"interval\" method: \"{}\" received. Check for mistakes in {} configuration.",
+                    method, settings.get_config().at("name").get<std::string>()) );
             }
 #ifdef DEBUG
-            if ( method != "Automatic" ) {
-                print(std::format("Success, interval: {}.\n", settings.get_measurement_period()), 4);
+            if ( method != "automatic" ) {
+                write_log(std::format("Success, interval: {}.\n", settings.get_measurement_period()));
             }
-            else { print("Automatic detection, interval checking postponed.\n", 4); }
+            else { write_log("Automatic detection, interval checking postponed.\n"); }
 #endif
 
             return true;
@@ -1275,7 +1296,15 @@ namespace burn_in_data_report
                 }
             }
 
-            for ( uinteger i = 0; i < files_.size(); ++i ) { if ( success_[i] ) { success_[i] = future[i].get(); } }
+            for ( uinteger i = 0; i < files_.size(); ++i ) {
+                if ( success_[i] ) {
+                    if ( !future[i].get() ) {
+                        failed_loads_.push_back(std::format("{}: Failed to parse time stamps.", files_[i].path().string()));
+                        write_log(std::format("<time_stamp_scan> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                }
+            }
 
             if ( !check_valid_state(success_) )
                 return false;
@@ -1293,7 +1322,7 @@ namespace burn_in_data_report
                        file_settings& settings ) noexcept {
         try {
             const std::vector<std::string> cols = settings.get_config().at("titles");
-            const auto col_types =
+            auto col_types =
                 settings.get_config().at("types").get<std::vector<DataType>>();
 
             if ( cols.size() != col_types.size() ) {
@@ -1301,11 +1330,12 @@ namespace burn_in_data_report
                     std::runtime_error("Length mismatch between \"titles\" and \"types\" parameters in configuration file.");
             }
             // Add [title, type] pairs to type map in Settings object
-            for ( uinteger i = 0; i < cols.size(); ++i ) {
-                settings.col_types()[cols[i]] = col_types[i];
-                settings.col_order()[cols[i]] = i;
+            /*for ( uinteger i = 0; i < cols.size(); ++i ) { */
+            for ( const auto& [i, col_title] : enumerate(cols) ) {
+                settings.col_types()[col_title] = col_types[i];
+                settings.col_order()[col_title] = static_cast<uinteger>(i);
             }
-            settings.set_n_cols(cols.size());
+            settings.set_n_cols(static_cast<uinteger>(cols.size()));
 
             return true;
         }
@@ -1329,8 +1359,10 @@ namespace burn_in_data_report
 
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
-                    for ( const auto& [title, type] : settings_[i].col_types() ) {
+                    if ( !futures[i].get() ) {
+                        failed_loads_.push_back(std::format("{}: Failed to parse column titles.", files_[i].path().string()));
+                        write_log(std::format("<column_title_scan> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
                     }
                 }
             }
@@ -1356,7 +1388,7 @@ namespace burn_in_data_report
             print("- <parse_data>:\n", 3);
 #endif
             nlohmann::json config = settings.get_config();
-            const auto& col_types = settings.get_col_types();
+            const auto& col_types = settings.col_types();
             const std::string delim { config.at("delim").get<std::string>() };
 
 #ifdef DEBUG
@@ -1364,6 +1396,8 @@ namespace burn_in_data_report
 #endif
             // Prepare storage to emplace_back values efficiently
             for ( auto& [key, type] : col_types ) {
+                if ( key == "Combined Time" ) { continue; }
+
                 switch ( type ) {
                 case DataType::INTEGER:
                     ints[key].clear();
@@ -1393,8 +1427,10 @@ namespace burn_in_data_report
                 const std::vector<std::string_view> values = split_str(lines[i], delim);
 
                 for ( const auto& [col_title, idx] : settings.col_order() ) {
+                    if ( col_title == "Combined Time" ) { continue; }
+
                     const auto col_type{ settings.get_type(col_title) };
-                    const std::string_view val{ values[idx]};
+                    const auto& val{ values[idx]};
 
                     char buf[MAX_LINE_LENGTH];
                     // sscanf, which is used to parse values in further on, automatically
@@ -1415,7 +1451,7 @@ namespace burn_in_data_report
                     case DataType::INTEGER: {
                         integer _integer { 0 };
                         sscanf_return_val =
-                            sscanf_s(buf, FMT, &_integer);
+                            sscanf_s(buf, fmt, &_integer);
                         ints[col_title].emplace_back(_integer);
                         break;
                     }
@@ -1439,13 +1475,11 @@ namespace burn_in_data_report
                 }
             }
 
-            auto SetMax =
+            const auto set_max =
                 []( const IMap& _ints, const DMap& _doubles,
                     const file_settings& _settings, file_stats& _stats ) {
                 const auto title_type_vec = _settings.get_col_types();
                 for ( const auto& title_type : title_type_vec ) {
-                    integer max_int = 0;
-                    double max_double = 0;
                     switch ( title_type.second ) {
                     case DataType::STRING: {
                         _stats.max_strings[title_type.first] =
@@ -1462,38 +1496,38 @@ namespace burn_in_data_report
                         _stats.max_doubles[title_type.first] = check_max(data);
                         break;
                     }
+                    case DataType::NONE: {}
+                        break;
                     }
                 }
             };
-            auto SetMin =
+            const auto set_min =
                 []( const IMap& _ints, const DMap& _doubles,
                     const file_settings& _settings, file_stats& _stats ) {
                 const auto title_type_vec = _settings.get_col_types();
-                for ( const auto& title_type : title_type_vec ) {
-                    integer min_int = 0;
-                    double min_double = 0;
-                    switch ( title_type.second ) {
+                for ( const auto& [title, type] : title_type_vec ) {
+                    switch ( type ) {
                     case DataType::STRING: {
-                        _stats.min_strings[title_type.first] =
+                        _stats.min_strings[title] =
                             std::numeric_limits<double>::signaling_NaN();
                         break;
                     }
                     case DataType::INTEGER: {
-                        const auto& data = _ints.at(title_type.first);
-                        _stats.min_ints[title_type.first] = check_min(data);
+                        const auto& data = _ints.at(title);
+                        _stats.min_ints[title] = check_min(data);
                         break;
                     }
                     case DataType::DOUBLE: {
-                        const auto& data = _doubles.at(title_type.first);
-                        for ( const double& val : data )
-                            min_double = MIN(min_double, val);
-                        _stats.min_doubles[title_type.first] = check_min(data);
+                        const auto& data = _doubles.at(title);
+                        _stats.min_doubles[title] = check_min(data);
                         break;
                     }
+                    case DataType::NONE: {}
+                        break;
                     }
                 }
             };
-            auto Set_n =
+            const auto set_n =
                 []( const IMap& _ints, const DMap& _doubles,
                     const SMap& _strings, const file_settings& _settings,
                     file_stats& _stats ) {
@@ -1519,35 +1553,30 @@ namespace burn_in_data_report
                 }
             };
 
-            std::future<void> set_max =
-                std::async(SetMax, std::cref(ints), std::cref(doubles),
+            std::future<void> launch_max =
+                std::async(set_max, std::cref(ints), std::cref(doubles),
                            std::cref(settings), std::ref(statistics));
-            std::future<void> set_min =
-                std::async(SetMin, std::cref(ints), std::cref(doubles),
+            std::future<void> launch_min =
+                std::async(set_min, std::cref(ints), std::cref(doubles),
                            std::cref(settings), std::ref(statistics));
-            std::future<void> set_n =
-                std::async(Set_n, std::cref(ints), std::cref(doubles), std::cref(strings),
+            std::future<void> launch_n =
+                std::async(set_n, std::cref(ints), std::cref(doubles), std::cref(strings),
                            std::cref(settings), std::ref(statistics));
 
             if ( std::string method = settings.get_config().at("interval").at("method");
-                method == "Automatic" ) {
-                std::string title = settings.get_config().at("interval").at("params").at("title");
-#ifdef DEBUG
-                print("- Automatic interval detection:", 4);
-#endif
+                method == "automatic" ) {
+                const std::string title{
+                    settings.get_config().at("interval").at("params").at("title").get<std::string>()
+                };
                 /*
                 * Title isn't in file?? This should have already been filtered out
                 * but just in case.
                 */
                 if ( !is_in(title, col_types) ) {
                     throw std::runtime_error(
-                                             std::format("No match for \"Automatic\" interval parsing title ({}) in file.",
-                                                         title)
-                                            );
+                        std::format("No match for \"Automatic\" interval parsing title ({}) in file.", title)
+                    );
                 }
-#ifdef DEBUG
-                print(std::format("- Provided title, {}, exists.", title), 4);
-#endif
 
                 /*
                 * Title is in file, but data isn't a numeric type.
@@ -1555,32 +1584,29 @@ namespace burn_in_data_report
                 if ( col_types.at(title) != DataType::INTEGER
                      && col_types.at(title) != DataType::DOUBLE ) {
                     std::runtime_error err(
-                                           std::format("\"Automatic\" interval parsing title ({}) has invalid DataType ({}).",
-                                                       title,
-                                                       type_string.at(col_types.at(title)))
-                                          );
+                        std::format(
+                            "\"Automatic\" interval parsing title ({}) has invalid DataType ({}).",
+                            title, type_string.at(col_types.at(title))
+                        )
+                    );
                     throw err;
                 }
 
-                auto avg_diff =
+                const auto avg_diff =
                     []<ArithmeticType T>( const std::vector<T>& data ) -> double {
-                    T sum_diff { 0 };
-                    for ( uinteger i { 1 }; i < data.size(); ++i ) { sum_diff += std::abs(data[i] - data[i - 1]); }
-                    return sum_diff / static_cast<double>( data.size() - 1 );
-                };
+                        T sum_diff { 0 };
+                        for ( uinteger i { 1 }; i < data.size(); ++i ) { sum_diff += std::abs(data[i] - data[i - 1]); }
+                        return sum_diff / static_cast<double>( data.size() );
+                    };
                 auto std_diff =
                     []<ArithmeticType T>( const std::vector<T>& data,
                                           const double& mean ) -> double {
-                    double sum { 0 };
-                    for ( uinteger i { 1 }; i < data.size(); ++i ) {
-                        sum += std::pow(std::abs(std::abs(data[i] - data[i - 1]) - mean), 2);
-                    }
-                    return std::sqrt(sum / static_cast<double>( data.size() - 1 ));
-                };
-
-#ifdef DEBUG
-                print("- Valid title confirmed.", 4);
-#endif
+                        double sum { 0 };
+                        for ( uinteger i { 1 }; i < data.size(); ++i ) {
+                            sum += std::pow(std::abs(std::abs(data[i] - data[i - 1]) - mean), 2);
+                        }
+                        return std::sqrt(sum / static_cast<double>( data.size() - 1 ));
+                    };
 
                 double mean { 0 }, std { 0 };
                 switch ( col_types.at(title) ) {
@@ -1605,44 +1631,36 @@ namespace burn_in_data_report
                     break;
                 }
 
-#ifdef DEBUG
-                print(std::format("- mean: {}, std: {}.", mean, std), 4);
-#endif
-
                 using dur = std::chrono::duration<double, std::chrono::seconds::period>;
                 if ( std > (0.25 * mean) ) {
-#ifdef DEBUG
-                    print("- Failed to automatically detect interval.", 3);
-#endif
                     write_err_log(std::runtime_error("<parse_data> Failed to detect consistent measurement interval."));
                     settings.set_measurement_period(std::chrono::duration_cast<nano>(dur { mean }));
                 }
                 else {
-#ifdef DEBUG
-                    print(std::format("- Automatically detect interval: {}.", mean), 3);
-#endif
                     settings.set_measurement_period(std::chrono::duration_cast<nano>(dur { mean }));
                 }
             }
 
-            ints_len = 0, doubles_len = 0, strings_len = 0;
+            ints_len = 0;
+            doubles_len = 0;
+            strings_len = 0;
             for ( auto& val : ints | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x = static_cast<uinteger>(val.size());
                 if ( ints_len == 0 )
                     ints_len = x;
                 assert(x == ints_len);
             }
             for ( auto& val : doubles | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x =  static_cast<uinteger>(val.size());
                 if ( doubles_len == 0 )
                     doubles_len = x;
                 assert(x == doubles_len);
             }
             for ( auto& val : strings | std::views::values ) {
                 val.shrink_to_fit();
-                uinteger x = val.size();
+                uinteger x = static_cast<uinteger>(val.size());
                 if ( strings_len == 0 )
                     strings_len = x;
                 assert(x == strings_len);
@@ -1667,9 +1685,9 @@ namespace burn_in_data_report
 
             settings.set_n_rows(max_val);
 
-            set_max.get();
-            set_min.get();
-            set_n.get();
+            launch_max.get();
+            launch_min.get();
+            launch_n.get();
 
             return true;
         }
@@ -1695,7 +1713,11 @@ namespace burn_in_data_report
             }
             for ( uinteger i = 0; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
-                    success_[i] = futures[i].get();
+                    if ( !futures[i].get() ) {
+                        failed_loads_.push_back(std::format("{}: Failed to parse data.", files_[i].path().string()));
+                        write_log(std::format("<parse_data> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
                 }
             }
 
@@ -1711,7 +1733,7 @@ namespace burn_in_data_report
     }
 
     static bool
-    trim_data( file_settings& settings,
+    trim_data( file_settings& settings, const bool trim_data,
                const file_stats& statistics, IMap& ints, uinteger& ints_len,
                DMap& doubles, uinteger& doubles_len, SMap& strings,
                uinteger& strings_len, const nano& max_off_time ) noexcept {
@@ -1732,64 +1754,77 @@ namespace burn_in_data_report
          */
 
         try {
+            if ( !trim_data ) {
+                return true;
+            }
+
             const auto& config = settings.get_config();
             const auto& filter_key = config.at("trim_filter_key").get<std::string>();
             const auto& type_map = settings.get_col_types();
-            if ( !type_map.contains(filter_key) ) {
-                write_log(std::format("\t\tInvalid or no trim key provided ({}).", filter_key));
+            if ( !type_map.contains(filter_key) || filter_key == "Combined Time" ) {
+                write_log(std::format(" | Invalid or no trim key provided ({}). | ", filter_key));
                 return true;
             }
             const auto& interval = settings.get_measurement_period();
+            if ( config.at("interval").at("method").get<std::string>() == "automatic" ) {
+                using second = std::chrono::duration<double, std::ratio<1>>;
+                using minute = std::chrono::duration<double, std::ratio<60>>;
+                write_log(std::format("\t\tinterval: {}", std::chrono::duration_cast<second>(interval)));
+                write_log(std::format("\t\tinterval: {}", std::chrono::duration_cast<minute>(interval)));
+            }
+            
             const auto& data_type = type_map.at(filter_key);
 
             assert(data_type != DataType::NONE);
 
-            // lambda generalise measuring downtime
             auto measure_downtime =
-                [&interval, &max_off_time]<ArithmeticType T>(
+                [&interval, &max_off_time]
+                <ArithmeticType T>(
                 const std::vector<T>& data,
                 const T& cutoff ) -> indices_t {
-                // Storage for results & std::chrono::duration to measure time w/
-                indices_t result;
-                auto downtime = nano::zero();
-                uinteger first { 0 };
+                    indices_t result;
 
-                // For each datapoint...
-                for ( uinteger i { 0 }; i < data.size(); ++i ) {
-                    const auto datapoint = data[i];
-                    switch ( (datapoint >= cutoff)
-                                 ? 1
-                                 : 0 ) {
-                    case 0:
-                        // datapoint < cutoff -> increment "downtime" by "interval"
-                        downtime += interval;
-                        break;
-                    case 1:
-                        // datapoint >= cutoff -> reset "downtime" & set "first" to i + 1
-                        downtime = nano::zero();
-                        first = i + 1;
-                        break;
-                    default:
-                        break;
-                    }
+                    auto downtime = nano::zero();
+                    uinteger range_start{ 0 };
 
-                    // If "downtime" > max time expected for OFF section of laser cycle
-                    if ( downtime > max_off_time ) {
-                        // Find full OFF time, push to result, increment i to the next
-                        // datapoint
-                        for ( uinteger j { i }; j < data.size(); ++j ) {
+                    for ( auto [i, datapoint] : enumerate(data) ) {
+                        #define cont_timer 1
+                        #define restart_timer 0
+                        // Get ranges of valid data
+                        switch ( datapoint >= cutoff
+                                     ? cont_timer
+                                     : restart_timer ) {
+                        case cont_timer:
                             downtime += interval;
-                            if ( data[j] > cutoff || j == data.size() - 1 ) {
-                                result.emplace_back(std::pair { first, j + 1 });
-                                i = j + 1;
-                                break;
+                            break;
+                        case restart_timer:
+                            downtime = nano::zero();
+                            range_start = i + 1;
+                            break;
+                        default:
+                            break;
+                        }
+                        #undef cont_timer
+                        #undef restart_timer
+
+                        // If "downtime" > max time expected for OFF section of laser cycle
+                        if ( downtime > max_off_time ) {
+                            // Find full OFF time, push to result, increment i to the next
+                            // datapoint
+                            for ( uinteger j { i }; j < data.size(); ++j ) {
+                                downtime += interval;
+                                if ( data[j] < cutoff || j == data.size() - 1 ) {
+                                    result.emplace_back(range_start, j + 1);
+                                    i = j + 1;
+                                    range_start = i;
+                                    break;
+                                }
                             }
                         }
                     }
-                }
 
-                return result;
-            };
+                    return result;
+                };
 
             indices_t trim_ranges;
             // get sections of assumed invalid data
@@ -1813,15 +1848,17 @@ namespace burn_in_data_report
             if ( trim_ranges.empty() ) { return true; }
 
             const auto remove_data =
-                [&trim_ranges]<typename T>( TMap<T>& map, const std::string& key ) {
-                    for ( const auto& [first, last]
-                          : trim_ranges | std::views::reverse ) {
-                        write_log(std::format("Removing data from idx {} -> {}.", first, last));
-                        map.at(key).erase(map.at(key).begin() + first, map.at(key).begin() + last);
+                [&trim_ranges]<typename T>( TMap<T>& map, const std::string& key ) -> auto {
+                    std::vector<T> tmp;
+                    tmp.reserve(map.at(key).size());
+                    for ( const auto& [first, last] : trim_ranges ) {
+                        tmp.insert(tmp.cend(), map.at(key).begin() + first, map.at(key).begin() + last);
                     }
+                    map[key] = std::move(tmp);
                 };
 
             for ( const auto& [key, type] : type_map ) {
+                if ( key == "Combined Time" ) { continue; }
                 if ( type == DataType::INTEGER ) { remove_data(ints, key); }
                 else if ( type == DataType::DOUBLE ) { remove_data(doubles, key); }
                 else if ( type == DataType::STRING ) { remove_data(strings, key); }
@@ -1833,48 +1870,52 @@ namespace burn_in_data_report
             uinteger len{ 0 };
             switch ( data_type ) {
             case DataType::INTEGER:
-                len = ints.at(filter_key).size();
+                len = static_cast<uinteger>(ints.at(filter_key).size());
                 break;
             case DataType::DOUBLE:
-                len = doubles.at(filter_key).size();
+                len = static_cast<uinteger>(doubles.at(filter_key).size());
                 break;
             case DataType::STRING:
-                len = strings.at(filter_key).size();
+                len = static_cast<uinteger>(strings.at(filter_key).size());
                 break;
             case DataType::NONE:
                 break;
             }
 
             for ( const auto& [key, type] : type_map ) {
+                if ( key == "Combined Time" ) { continue; }
                 switch ( type ) {
-                case DataType::INTEGER:
-                    if ( ints.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::INTEGER: {
+                        if ( ints.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
-                case DataType::DOUBLE:
-                    if ( doubles.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::DOUBLE: {
+                        if ( doubles.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
-                case DataType::STRING:
-                    if ( strings.at(key).size() != len ) {
-                        throw
-                            std::runtime_error(
-                                std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
-                                                    key, type_string.at(type)
-                                )
-                            );
+                case DataType::STRING: {
+                        if ( strings.at(key).size() != len ) {
+                            throw
+                                std::runtime_error(
+                                    std::format("DLL: <trim_data> Failed to update altered data size ({}, {}).",
+                                                        key, type_string.at(type)
+                                    )
+                                );
+                        }
                     }
                     break;
                 case DataType::NONE:
@@ -1886,6 +1927,7 @@ namespace burn_in_data_report
             doubles_len = len;
             strings_len = len;
             settings.set_n_rows(len);
+
 
             return true;
         }
@@ -1905,7 +1947,7 @@ namespace burn_in_data_report
             for ( uinteger i { 0 }; i < files_.size(); ++i ) {
                 if ( success_[i] ) {
                     futures[i] =
-                        std::async(trim_data, std::ref(settings_[i]),
+                        std::async(trim_data, std::ref(settings_[i]), do_trimming_,
                                    std::ref(statistics_[i]), std::ref(file_ints_[i]),
                                    std::ref(ints_lens_[i]), std::ref(file_doubles_[i]),
                                    std::ref(doubles_lens_[i]), std::ref(file_strings_[i]),
@@ -1913,8 +1955,13 @@ namespace burn_in_data_report
                 }
             }
             for ( uinteger i { 0 }; i < files_.size(); ++i ) {
-                if ( success_[i] )
-                    success_[i] = futures[i].get();
+                if ( success_[i] ) {
+                    if ( !futures[i].get() ) {
+                        failed_loads_.push_back(std::format("{}: Failed to trim data.", files_[i].path().string()));
+                        write_log(std::format("<trim_data> failed in {}", files_[i].path().string()));
+                        success_[i] = false;
+                    }
+                }
             }
 
             if ( !check_valid_state(success_) )
@@ -1931,9 +1978,7 @@ namespace burn_in_data_report
     static bool
     compare_title_type_pair( const std::pair<std::string, DataType>& _a,
                              const std::pair<std::string, DataType>& _b ) noexcept {
-        if ( _a.first == _b.first && _a.second == _b.second )
-            return true;
-        return false;
+        return _a.first == _b.first && _a.second == _b.second;
     }
 
     inline bool
@@ -2038,8 +2083,8 @@ namespace burn_in_data_report
 
                 if ( i >= j ) { return j; }
 
-                if ( !_f.swap(i, j) )
-                    return _f.files_.size();
+                if ( !_f.swap( i, j ) )
+                    { return static_cast<uinteger>(_f.files_.size()); }
             }
         };
         try {
@@ -2049,14 +2094,13 @@ namespace burn_in_data_report
                 return true;
 
             if ( _lo >= 0 && _hi >= 0 && _lo < _hi ) {
-                uinteger diff = _hi - _lo;
-                if ( _f.files_.size() == 2 || (_hi - _lo) == 1 ) {
+                if ( _f.files_.size() == 2 || _hi - _lo == 1 ) {
                     if ( _f.settings_[_lo].get_start_time() > _f.settings_[_hi].get_start_time() )
                         _f.swap(_lo, _hi);
                     return true;
                 }
 
-                uinteger p = partition(_f, _lo, _hi);
+                const uinteger p = partition(_f, _lo, _hi);
                 if ( p == _f.files_.size() ) {
                     write_err_log(std::runtime_error("DLL: <file_data_qsrt> Invalid partition index."));
                     return false;
@@ -2079,20 +2123,17 @@ namespace burn_in_data_report
     inline bool
     file_data::clear_failed_loads() noexcept {
         try {
-            std::vector<uinteger> indexes_to_erase;
-            for ( uinteger i = 0; i < success_.size();
-                  ++i ) { // Find all indexes to erase
-                if ( !success_[i] )
-                    indexes_to_erase.push_back(i);
+            std::vector<uinteger> indices_to_erase;
+            for ( uinteger i = 0; i < success_.size(); ++i ) {
+                if ( !success_[i] ) {
+                    write_log(std::format(" - Failed to load: {}", files_[i].path().string()));
+                    indices_to_erase.push_back(i);
+                }
             }
-            // Iterate indexes_to_erase in reverse, removing vals
-            // Prevents indexes being altered by the removal of other values
-            // Also takes advantage of std::vector<>::erase to be more efficient
-            if ( indexes_to_erase.size() > 0 ) {
-                integer pos = indexes_to_erase.size() - 1;
-                while ( pos >= 0 ) {
-                    erase(indexes_to_erase[pos]);
-                    pos--;
+
+            if ( !indices_to_erase.empty() ) {
+                for ( const uinteger& idx : indices_to_erase | std::views::reverse ) {
+                    erase(idx);
                 }
             }
         }
@@ -2109,7 +2150,7 @@ namespace burn_in_data_report
     file_data::sort_files() noexcept {
         try {
             // Sort:
-            if ( !file_data_qsrt(*this, 0, files_.size() - 1, 0) ) {
+            if ( !file_data_qsrt(*this, 0, static_cast<uinteger>(files_.size()) - 1, 0) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::sort_files> file_data_qsrt failed."));
                 return false;
             }
@@ -2130,25 +2171,18 @@ namespace burn_in_data_report
     combine_cols( const std::vector<file_settings>& _settings,
                   TypeMap& _col_types ) noexcept {
         try {
-            // for each (i, settings).
-            std::unordered_map<std::string, integer> repeated_keys;
-            for ( const auto& [i, settings] : enumerate(_settings) ) {
-                // For each (key, type) pair.
+            for ( const auto& settings : _settings ) {
                 for ( auto& [key, type] : settings.get_col_types() ) {
-                    if ( !is_in(key, _col_types) ) {
-                        // key not in col_types_ yet, add it.
+                    if ( !_col_types.contains(key) ) {
                         _col_types[key] = type;
-                    }
-                    else {
-                        /* key exists already.Adjust name so it's unique, then add. */
-                        /*
-                        std::string new_key{ key + "_" + type_string.at( type ) };
-                        const int64_t count = is_in_count( new_key, repeated_keys );
-                        repeated_keys[new_key] = count + 1;
-                        new_key += ("__" + std::to_string( count + 1 ));
-                        col_types_[new_key] = type;
-                        */
-                    }
+                    }/* else {
+                        if ( _col_types.at(key) != type ) {
+                            throw
+                                std::runtime_error(
+                                    "DataType mismatch, columns with matching names across files have different data types."
+                                );
+                        }
+                    }*/
                 }
             }
             return true;
@@ -2168,9 +2202,6 @@ namespace burn_in_data_report
                    const std::vector<file_stats>& _source,
                    file_stats& _dest ) {
         try {
-            // max_ints, max_doubles, min_ints, min_doubles, means, medians, stdevs,
-            // _n
-            // Add all titles to _dest
             for ( const auto& [key, type] : _type_map ) {
                 _dest.max_doubles[key] = 0;
                 _dest.max_ints[key] = 0;
@@ -2180,22 +2211,27 @@ namespace burn_in_data_report
             }
 
             for ( const auto& [key, type] : _type_map ) {
-                integer max_int = 0, min_int = std::numeric_limits<integer>::max();
-                double max_double = 0, min_double = std::numeric_limits<double>::max();
-                for ( const auto& stats : _source ) {
-                    switch ( type ) {
-                    case DataType::INTEGER:
-                        max_int = MAX(max_int, stats.max_ints.at( key ));
-                        min_int = MIN(min_int, stats.min_ints.at( key ));
-                        break;
-                    case DataType::DOUBLE:
-                        max_double = MAX(max_double, stats.max_doubles.at( key ));
-                        min_double = MIN(min_double, stats.min_doubles.at( key ));
-                        break;
-                    }
 
-                    _dest._n[key].insert(_dest._n[key].end(), stats._n.at(key).begin(),
+                integer max_int = std::numeric_limits<integer>::lowest(), min_int = std::numeric_limits<integer>::max();
+                double max_double = std::numeric_limits<double>::lowest(), min_double = std::numeric_limits<double>::max();
+
+                for ( const auto& stats : _source ) {
+                    try {
+                        switch ( type ) {
+                        case DataType::INTEGER:
+                            max_int = MAX(max_int, stats.max_ints.at( key ));
+                            min_int = MIN(min_int, stats.min_ints.at( key ));
+                            break;
+                        case DataType::DOUBLE:
+                            max_double = MAX(max_double, stats.max_doubles.at( key ));
+                            min_double = MIN(min_double, stats.min_doubles.at( key ));
+                            break;
+                        }
+
+                        _dest._n[key].insert(_dest._n[key].end(), stats._n.at(key).begin(),
                                          stats._n.at(key).end());
+                    }
+                    catch ( const std::exception& err ) { write_err_log(err, "DLL: <combine_stats>"); }
                 }
                 _dest.max_ints[key] = max_int;
                 _dest.min_ints[key] = min_int;
@@ -2221,37 +2257,23 @@ namespace burn_in_data_report
             internal_time_.clear();
             file_boundaries_.clear();
 
-#ifdef DEBUG
-            print("- Clearing failed loads...", 4);
-            Timer t;
-#endif
             // Remove all files which failed to load:
             if ( !clear_failed_loads() ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> \"clear_failed_loads\" failed."));
                 return false;
             }
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-            print("- Sorting files...", 4);
-            t.reset();
-#endif
             // Presort all entries here:
             if ( !sort_files() ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> \"sort_files\" failed."));
                 return false;
             }
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-            print("- Combining unique column title pairs...", 4);
-            t.reset();
-#endif
             // get all unique (ColTitle + ColType) pairs
             if ( !combine_cols(settings_, this->col_types()) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> \"combine_cols\" failed."));
                 return false;
             }
 
-            // Add empty arrays to ints_, doubles_, strings_
+            // Add empty entries to ints_, doubles_, strings_
             for ( const auto& [key, type] : this->col_types() ) {
                 switch ( type ) {
                 case DataType::INTEGER:
@@ -2269,29 +2291,15 @@ namespace burn_in_data_report
                 }
             }
 
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-            print("- Combining stats data...", 4);
-            t.reset();
-#endif
             if ( !combine_stats(this->get_col_types(), statistics_, *this) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> \"combine_stats\" failed."));
                 return false;
             }
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-            print("- Combining settings data...", 4);
-            t.reset();
-#endif
+
             if ( !combine_settings(settings_) ) {
                 write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> \"combine_settings\" failed."));
                 return false;
             }
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-            print("- Concatenating files...", 4);
-            t.reset();
-#endif
 
             /*
             * Count total number of rows so memory can be
@@ -2317,14 +2325,11 @@ namespace burn_in_data_report
                 /*
                 * Add record of file boundary
                 */
-                file_boundaries_[i] = std::pair { current_time, settings.get_start_time() };
-                /*
-                * It isn't guaranteed that all the files have the same
-                * measurement interval, so we need to check for that.
-                */
+                file_boundaries_.emplace_back(file_boundary_t(static_cast<uinteger>(i), files_[i].path().filename().string(), current_time, settings.get_start_time()));
+                write_log(std::format("file boundary: {}, {}, {}, {}", i, files_[i].path().filename().string(), current_time.count(), settings.get_start_time()));
+
                 const nano& interval = settings.get_measurement_period();
-                const uinteger& n = settings.get_n_rows();
-                for ( uinteger j { 0 }; j < n; ++j ) {
+                for ( uinteger j { 0 }; j < settings.get_n_rows(); ++j ) {
                     internal_time_[pos++] = current_time;
                     current_time += interval;
                 }
@@ -2332,7 +2337,6 @@ namespace burn_in_data_report
             auto& cols{ col_types() };
             cols["Combined Time"] = DataType::DOUBLE;
             doubles_["Combined Time"] = get_internal_time_double();
-            assert(pos == n_rows);
 
             /*
             * Iterate through (col, type) pairs
@@ -2340,81 +2344,75 @@ namespace burn_in_data_report
             * If exists --> Concatenate
             * If not --> Concatenate array of 0/0.0/("NULL"/"")
             */
-            auto ConcatVals = [this]<typename T>(
+            const auto concat_vals =
+                [this]<typename T>(
                 const TMap<T>& _lookup_loc, TMap<T>& _storage_loc,
                 const std::string& key, const DataType& type,
                 const uinteger& _len, const file_stats& _stats,
                 const T& _default_fill = 0 ) {
-#ifdef DEBUG
-                print("-_key_type_pair: (\"" + key + "\", " +
-                      std::to_string(static_cast<int>( type )) + ", " +
-                      std::to_string(_lookup_loc.at(key).size()) + ")",
-                      4);
-#endif
-                const auto iter = _lookup_loc.find(key);
-                if ( iter != _lookup_loc.end() ) {
-                    // Insert separate data to end of combined storage
-                    _storage_loc[key].insert(
-                                             _storage_loc[key].end(),
-                                             _lookup_loc.at(key).begin(),
-                                             _lookup_loc.at(key).end()
-                                            );
-                    try {
-                        // Update value of max / min in (max/min)_[typename]
-                        switch ( type ) {
-                        case DataType::INTEGER:
-                            max_ints[key] = MAX(max_ints.at( key ), _stats.max_ints.at( key ));
-                            min_ints[key] = MIN(min_ints.at( key ), _stats.min_ints.at( key ));
-                            break;
-                        case DataType::DOUBLE:
-                            max_doubles[key] =
-                                MAX(max_doubles.at( key ), _stats.max_doubles.at( key ));
-                            min_doubles[key] =
-                                MIN(min_doubles.at( key ), _stats.min_doubles.at( key ));
-                            break;
-                        case DataType::STRING:
-                            break;
-                        case DataType::NONE:
-                            write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> Invalid type received."));
+                    const auto iter = _lookup_loc.find(key);
+                    if ( iter != _lookup_loc.end() ) {
+                        // Insert separate data to end of combined storage
+                        _storage_loc[key].insert(
+                            _storage_loc[key].end(),
+                            _lookup_loc.at(key).begin(), _lookup_loc.at(key).end()
+                        );
+
+                        try {
+                            // Update value of max / min in (max/min)_[typename]
+                            switch ( type ) {
+                            case DataType::INTEGER:
+                                max_ints[key] = MAX(max_ints.at( key ), _stats.max_ints.at( key ));
+                                min_ints[key] = MIN(min_ints.at( key ), _stats.min_ints.at( key ));
+                                break;
+                            case DataType::DOUBLE:
+                                max_doubles[key] =
+                                    MAX(max_doubles.at( key ), _stats.max_doubles.at( key ));
+                                min_doubles[key] =
+                                    MIN(min_doubles.at( key ), _stats.min_doubles.at( key ));
+                                break;
+                            case DataType::STRING:
+                                break;
+                            case DataType::NONE:
+                                write_err_log(std::runtime_error("DLL: <file_data::async_combine_data> Invalid type received."));
+                                return false;
+                            }
+                        }
+                        catch ( const std::exception& err ) {
+                            write_err_log(err, "DLL: <file_data::async_combine_data::ConcatVals>");
                             return false;
                         }
+                        return true;
                     }
-                    catch ( const std::exception& err ) {
-                        write_err_log(err, "DLL: <file_data::async_combine_data::ConcatVals>");
-                        return false;
-                    }
+                    // Key didn't exist insert _len default values as placeholder
+                    _storage_loc[key].insert(
+                                             _storage_loc[key].end(),
+                                             _len,
+                                             _default_fill
+                                            );
                     return true;
-                }
-                // Key didn't exist insert _len default values as placeholder
-                _storage_loc[key].insert(
-                                         _storage_loc[key].end(),
-                                         _len,
-                                         _default_fill
-                                        );
-                return true;
-            };
+                };
             /*
             * For all (title, type) pairs in ALL files.
             * It is NOT guaranteed that all files have the same title type pairs.
             * It IS guaranteed that all titles will be unique.
             */
             for ( const auto& [title, type] : this->col_types() ) {
-                if ( title == "Combined Time" ) {
-                    continue;
-                }
+                // Skip 
+                if ( title == "Combined Time" ) { continue; }
 
                 for ( uinteger j = 0; j < files_.size(); ++j ) {
                     switch ( type ) {
                     case DataType::INTEGER:
-                        ConcatVals(file_ints_[j], ints_, title, type, ints_lens_[j],
-                                   statistics_[j], 0);
+                        concat_vals(file_ints_[j], ints_, title, type, ints_lens_[j],
+                                   statistics_[j], static_cast<integer>(0));
                         break;
                     case DataType::DOUBLE:
-                        ConcatVals(file_doubles_[j], doubles_, title, type, doubles_lens_[j],
+                        concat_vals(file_doubles_[j], doubles_, title, type, doubles_lens_[j],
                                    statistics_[j], 0.);
                         break;
                     case DataType::STRING:
-                        ConcatVals(file_strings_[j], strings_, title, type, strings_lens_[j],
+                        concat_vals(file_strings_[j], strings_, title, type, strings_lens_[j],
                                    statistics_[j], std::string(""));
                         break;
                     case DataType::NONE:
@@ -2424,10 +2422,7 @@ namespace burn_in_data_report
                 }
             }
 
-            set_n_cols(col_types().size());
-#ifdef DEBUG
-            print("Finished, " + std::to_string(t.elapsed()) + "s.", 4);
-#endif
+            set_n_cols(static_cast<uinteger>(col_types().size()));
             return true;
         }
         catch ( const std::exception& err ) {

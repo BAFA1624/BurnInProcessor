@@ -124,7 +124,7 @@ namespace burn_in_data_report
             ptr1++;
         while ( ptr1 != ptr2 && is_whitespace(*ptr2) )
             ptr2--;
-        return std::pair{ ptr1 - sv.data(), ptr2 - sv.data() };
+        return std::pair{ static_cast<integer>(ptr1 - sv.data()), static_cast<integer>(ptr2 - sv.data()) };
     }
 
     // Remove leading & ending whitespace characters
@@ -245,7 +245,7 @@ namespace burn_in_data_report
     TimeType
     time_format( const std::string& _time_str, const std::string& _parse_pattern, const TimeType& _default ) {
         TimeType          time_stamp{ TimeType::duration::zero() }; // Stores result
-        std::stringstream ss { _time_str }; // Construct stream to parse data from
+        std::stringstream ss{ _time_str };
 
         std::chrono::from_stream(ss, _parse_pattern.c_str(), time_stamp);
 

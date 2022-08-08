@@ -1,0 +1,23 @@
+{
+  "name": "eli_alpha_0_starlab",
+  "file_identifier": ";PC Software:StarLab Version 3\\.7[\\d] Build [\\d]+[\\r\\s]*",
+  "header_identifier": "[ \\t]+Timestamp[ \\t]+Channel A[ \\t]+Channel C[ \\t]+ Channel B[ \\t\\r]+",
+  "delim": "\t",
+  "titles": [ "Timestamp", "Channel A", "Channel C", "Channel B" ],
+  "types": [ 1, 1, 1, 1 ],
+  "start_time": {
+    "method": "in_header",
+    "params": {
+      "re_pattern": ";First Pulse Arrived : ([\\d]+/[\\d]+/[\\d]+ at [\\d]+:[\\d]+:[\\d]+)[\\r\\s]*",
+      "time_pattern": "%d/%m/%Y at %H:%M:%S"
+    }
+  },
+  "interval": {
+    "method": "in_header",
+    "params": {
+      "re_pattern": ";Log Settings:Sample:of period: ([\\d]+:[\\d]+:[\\d]+)[\\r\\s]*",
+      "time_pattern": "%H:%M:%S"
+    }
+  },
+  "trim_filter_key": ""
+}

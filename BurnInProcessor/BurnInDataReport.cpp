@@ -7,10 +7,10 @@ static bidr::spreadsheet spreadsheet;
 // Not exported
 BOOL WINAPI
 load_files( _In_ const LPSAFEARRAY* ppsa,
-            _In_ LPVARIANT raw_config_loc_name,
-            _In_ const uinteger& max_header_sz,
-            _In_ const double& max_off_time_minutes,
-            _In_ const bool& do_trimming ) {
+            _In_ LPVARIANT          raw_config_loc_name,
+            _In_ const uinteger&    max_header_sz,
+            _In_ const double&      max_off_time_minutes,
+            _In_ const bool         do_trimming ) {
     try {
         write_log("Adding files...");
         CComSafeArray<VARIANT> variant_filenames(*ppsa);
@@ -37,11 +37,6 @@ load_files( _In_ const LPSAFEARRAY* ppsa,
                                   ? true
                                   : false);
 
-        std::string msg("Available columns:");
-        for ( const auto& col : spreadsheet.get_available_cols() ) { msg += std::format("\n - {}", col); }
-        msg += "\nFiles loaded.";
-        write_log(msg);
-
         return TRUE;
     }
     catch ( const std::exception& err ) {
@@ -57,7 +52,7 @@ clear_spreadsheet() {
         const BOOL result = (spreadsheet.clear_spreadsheet())
                                 ? TRUE
                                 : FALSE;
-        const std::string err_log{ log_location + "BurnInErrLog.txt" };
+        const std::string err_log { log_location + "BurnInErrLog.txt" };
         bidr::copy_file(log_path, err_log);
         if ( !result ) { throw std::runtime_error("Failed to clear spreadsheet."); }
         clear_log();
@@ -72,17 +67,18 @@ clear_spreadsheet() {
 // Exported
 BOOL WINAPI
 init_spreadsheet( _In_ const LPSAFEARRAY* ppsa,
-                  _In_ LPVARIANT raw_config_loc_name,
-                  _In_ const uinteger& max_header_sz,
-                  _In_ const double& max_off_time_minutes,
-                  _In_ const int& do_trimming,
-                  _In_ LPVARIANT log_file_path ) {
+                  _In_ LPVARIANT          raw_config_loc_name,
+                  _In_ const uinteger&    max_header_sz,
+                  _In_ const double&      max_off_time_minutes,
+                  _In_ const uinteger&    do_trimming,
+                  _In_ LPVARIANT          log_file_path ) {
     try {
         log_location = bidr::bstr_string_convert(_bstr_t(log_file_path));
-        BOOL result = clear_spreadsheet();
-        write_log("Initializing spreadsheet...");
+        BOOL result  = clear_spreadsheet();
         result &= load_files(ppsa, raw_config_loc_name, max_header_sz,
-                             max_off_time_minutes, do_trimming == FALSE ? false : true);
+                             max_off_time_minutes, do_trimming == static_cast<uinteger>(1)
+                                                       ? true
+                                                       : false);
         return result;
     }
     catch ( const std::exception& err ) {
@@ -165,7 +161,7 @@ remove_files( LPSAFEARRAY* ppsa ) {
         CComSafeArray<uinteger> csa(*ppsa);
         write_log(std::format("Removing {} files...", csa.GetCount()));
         constexpr auto conversion_op = []( const uinteger& x ) { return x; };
-        const auto arr {
+        const auto     arr {
                 bidr::array_convert<uinteger, uinteger>(csa, conversion_op)
             };
         *ppsa = csa.Detach();
@@ -184,9 +180,9 @@ LPSAFEARRAY WINAPI
 get_current_cols() {
     try {
         write_log("Retrieving loaded columns...");
-        CComSafeArray<VARIANT> csa(spreadsheet.get_current_cols().size());
+        CComSafeArray<VARIANT> csa(static_cast<ULONG>( spreadsheet.get_current_cols().size() ));
         for ( const auto& [i, col] : bidr::enumerate(spreadsheet.get_current_cols()) ) {
-            csa.SetAt(i, _variant_t(bidr::string_bstr_convert(col)));
+            csa.SetAt(static_cast<ULONG>( i ), _variant_t(bidr::string_bstr_convert(col)));
         }
         return csa.Detach();
     }
@@ -201,10 +197,10 @@ LPSAFEARRAY WINAPI
 get_available_cols() {
     try {
         write_log("Retrieving available columns...");
-        CComSafeArray<VARIANT> csa(spreadsheet.get_available_cols().size());
+        CComSafeArray<VARIANT> csa(static_cast<ULONG>( spreadsheet.get_available_cols().size() ));
         for ( const auto& [i, col] : bidr::enumerate(spreadsheet.get_available_cols()) ) {
-            write_log(std::format("  - {}", col));
-            csa.SetAt(i, _variant_t(bidr::string_bstr_convert(col)));
+            //write_log(std::format("  - {}", col));
+            csa.SetAt(static_cast<ULONG>( i ), _variant_t(bidr::string_bstr_convert(col)));
         }
         return csa.Detach();
     }
@@ -222,8 +218,8 @@ load_column( LPVARIANT v_col_title ) {
         write_log(std::format("Loading column: {}", col_title));
         const bool result = spreadsheet.load_column(col_title);
         write_log(result
-                       ? "Succeeded"
-                       : "Failed");
+                      ? "Succeeded"
+                      : "Failed");
         return result
                    ? TRUE
                    : FALSE;
@@ -296,7 +292,7 @@ BOOL WINAPI
 unload_columns( LPSAFEARRAY* ppsa ) {
     try {
         CComSafeArray<VARIANT> csa(*ppsa);
-        const auto arr {
+        const auto             arr {
                 bidr::array_convert<VARIANT, std::string>(
                                                           csa,
                                                           []( const VARIANT& v ) {
@@ -325,15 +321,19 @@ unload_columns( LPSAFEARRAY* ppsa ) {
 
 // Exported
 BOOL WINAPI
-filter( LPVARIANT v_col_title,
-        const double& cutoff,
+filter( LPVARIANT       v_col_title,
+        const double&   cutoff,
         const uinteger& n_skip,
         const uinteger& max_range_sz ) {
     try {
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
         const bool result = spreadsheet.filter(col_title, cutoff, n_skip, max_range_sz);
-        write_log(std::format("Filter result: {}", result ? "Success." : "Failed."));
-        return result ? TRUE : FALSE;
+        write_log(std::format("Filter result: {}", result
+                                                       ? "Success."
+                                                       : "Failed."));
+        return result
+                   ? TRUE
+                   : FALSE;
     }
     catch ( const std::exception& err ) {
         const auto col_title { bidr::bstr_string_convert(*v_col_title) };
@@ -349,15 +349,17 @@ reduce_data( const uinteger& reduction_type,
              const uinteger& n_group,
              const uinteger& n_points ) {
     try {
-        write_log( "Reducing data..." );
+        write_log("Reducing data...");
         const auto r_type = static_cast<bidr::reduction_type>( reduction_type );
         const auto a_type = static_cast<bidr::avg_type>( average_type );
-        const auto result{ spreadsheet.reduce( r_type, a_type, n_group, n_points ) };
-        write_log( result ? "Succeeded." : "Failed" );
+        const auto result { spreadsheet.reduce(r_type, a_type, n_group, n_points) };
+        write_log(result
+                      ? "Succeeded."
+                      : "Failed");
         return result;
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <reduce_data>" );
+        write_err_log(err, "DLL: <reduce_data>");
         return FALSE;
     }
 }
@@ -386,45 +388,49 @@ get( LPVARIANT key ) {
         using DT = bidr::DataType;
 
         const auto s_key { bidr::bstr_string_convert(*key) };
-        const auto type { spreadsheet.type( s_key ) };
+        const auto type { spreadsheet.type(s_key) };
 
-        if (  type == DT::NONE ) {
-            throw std::out_of_range( "Key not found." );
-        }
+        if ( type == DT::NONE ) { throw std::out_of_range("Key not found."); }
+
+        write_log(std::format("Sending {}", s_key));
 
         switch ( type ) {
-        case DT::INTEGER: {
-            return bidr::array_convert<integer, VARIANT>(
-                    spreadsheet.get_i(s_key),
-                    [](const integer& i)
-                    { return _variant_t(i); },
-                    false
-                );
+        case DT::INTEGER:
+            {
+                write_log(std::format("Size: {}", spreadsheet.get_i(s_key).size()));
+                return bidr::array_convert<integer, VARIANT>(
+                                                             spreadsheet.get_i(s_key),
+                                                             []( const integer& i ) { return _variant_t(i); },
+                                                             false
+                                                            );
             }
-        case DT::DOUBLE: {
-            return bidr::array_convert<double, VARIANT>(
-                    spreadsheet.get_d(s_key),
-                    [](const double& d)
-                    { return _variant_t(d); },
-                    false
-                );
+        case DT::DOUBLE:
+            {
+                write_log(std::format("Size: {}", spreadsheet.get_d(s_key).size()));
+                return bidr::array_convert<double, VARIANT>(
+                                                            spreadsheet.get_d(s_key),
+                                                            []( const double& d ) { return _variant_t(d); },
+                                                            false
+                                                           );
             }
-        case DT::STRING: {
-            return bidr::array_convert<std::string, VARIANT>(
-                    spreadsheet.get_s(s_key),
-                    [](const std::string& s)
-                    { return _variant_t(_bstr_t(s.c_str())); }
-                );
+        case DT::STRING:
+            {
+                write_log(std::format("Size: {}", spreadsheet.get_s(s_key).size()));
+                return bidr::array_convert<std::string, VARIANT>(
+                                                                 spreadsheet.get_s(s_key),
+                                                                 []( const std::string& s ) {
+                                                                     return _variant_t(_bstr_t(s.c_str()));
+                                                                 }
+                                                                );
             }
-        case DT::NONE: {
-            throw std::runtime_error("Invalid type.");
-            }
+        case DT::NONE: { throw std::runtime_error("Invalid type."); }
         }
 
+        write_log("wut");
         return SafeArrayCreateVectorEx(VT_VARIANT, 0, 0, nullptr);
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <get>" );
+        write_err_log(err, "DLL: <get>");
         return SafeArrayCreateVectorEx(VT_VARIANT, 0, 0, nullptr);
     }
 }
@@ -438,19 +444,16 @@ get_error( LPVARIANT key ) {
         const auto s_key { bidr::bstr_string_convert(*key) };
 
         if ( const auto type { spreadsheet.type(s_key) };
-             type == DT::NONE ) {
-            throw std::out_of_range("Key not found.");
-        }
+            type == DT::NONE ) { throw std::out_of_range("Key not found."); }
 
         return bidr::array_convert<double, VARIANT>(
-            spreadsheet.get_error(s_key),
-            [](const double& d)
-            { return _variant_t(d); },
-            false
-        );
+                                                    spreadsheet.get_error(s_key),
+                                                    []( const double& d ) { return _variant_t(d); },
+                                                    false
+                                                   );
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <get_error>" );
+        write_err_log(err, "DLL: <get_error>");
         return SafeArrayCreateVectorEx(VT_R8, 0, 0, nullptr);
     }
 }
@@ -462,10 +465,12 @@ contains( LPVARIANT key ) {
         const auto s_key { bidr::bstr_string_convert(*key) };
         const auto exists { spreadsheet.contains(s_key) };
         write_log(std::format("Checking if contains {}: {}", s_key, spreadsheet.contains(s_key)));
-        return exists ? TRUE : FALSE;
+        return exists
+                   ? TRUE
+                   : FALSE;
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <contains>" );
+        write_err_log(err, "DLL: <contains>");
         return FALSE;
     }
 }
@@ -475,15 +480,14 @@ integer WINAPI
 type( LPVARIANT key ) {
     using DT = bidr::DataType;
     try {
-        const auto s_key{ bidr::bstr_string_convert(*key) };
-        write_log(std::format("Checking type: {}", s_key));
-        const auto type{ spreadsheet.type(s_key) };
-        write_log(std::format("\t-type: {}", bidr::type_string.at(type)));
-        return static_cast<integer>(type);
+        const auto s_key { bidr::bstr_string_convert(*key) };
+        const auto type { spreadsheet.type(s_key) };
+        write_log(std::format("\t- {} type: {}", s_key, bidr::type_string.at(type)));
+        return static_cast<integer>( type );
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <type>" );
-        return static_cast<integer>(DT::NONE);
+        write_err_log(err, "DLL: <type>");
+        return static_cast<integer>( DT::NONE );
     }
 }
 
@@ -491,11 +495,82 @@ type( LPVARIANT key ) {
 BOOL WINAPI
 clear_changes() {
     try {
-        return spreadsheet.clear_changes() ? TRUE : FALSE;
+        return spreadsheet.clear_changes()
+                   ? TRUE
+                   : FALSE;
     }
     catch ( const std::exception& err ) {
-        write_err_log( err, "DLL: <clear_changes>" );
+        write_err_log(err, "DLL: <clear_changes>");
         return FALSE;
+    }
+}
+
+LPSAFEARRAY WINAPI
+file_boundaries() {
+    try {
+
+        const auto& boundaries { spreadsheet.get_file_boundaries() };
+
+
+        if ( boundaries.empty() ) { return nullptr; }
+
+        std::vector<std::string> temp_str;
+        temp_str.reserve(boundaries.size());
+
+        for ( const auto& [i, b] : enumerate(boundaries) ) {
+            temp_str.emplace_back(
+                                  std::format("{},{},{},{}", b.index, b.file_name, b.internal_time, b.start_time)
+                                 );
+        }
+
+        return
+            bidr::array_convert<std::string, VARIANT>(
+                temp_str,
+                []( const auto& s )
+                { return _variant_t(_bstr_t(s.c_str())); }
+            );
+    }
+    catch ( const std::exception& err ) {
+        write_err_log(err, "DLL: <file_boundaries>");
+        return SafeArrayCreateVectorEx(VT_R8, 0, 0, nullptr);
+    }
+}
+
+LPSAFEARRAY WINAPI
+get_load_info() {
+    try {
+        const auto load_info{ spreadsheet.get_load_info() };
+        return
+            bidr::array_convert<bool, BOOL>(
+                load_info,
+                [](const bool& b)->BOOL
+                { return b ? TRUE : FALSE; }
+            );
+    }
+    catch ( const std::exception& err ) {
+        write_err_log(err, "DLL: <get_load_info>");
+        CComSafeArray<BOOL> csa;
+        return csa.Detach();
+    }
+}
+
+LPSAFEARRAY WINAPI
+get_failed_loads() {
+    try {
+        for ( const auto& x : spreadsheet.get_failed_loads() ) {
+            write_log(x);
+        }
+        return
+            bidr::array_convert<std::string, VARIANT>(
+                spreadsheet.get_failed_loads(),
+                [](const std::string& s)
+                { return _variant_t(_bstr_t(s.c_str())); }
+            );
+    }
+    catch ( const std::exception& err ) {
+        write_err_log(err, "DLL: <get_failed_loads>");
+        CComSafeArray<VARIANT> csa(static_cast<ULONG>(0));
+        return csa.Detach();
     }
 }
 

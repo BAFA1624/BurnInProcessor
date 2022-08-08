@@ -1,0 +1,22 @@
+{
+  "name": "DataLoggerDefaultConfig",
+  "file_identifier": "[\\d]+\\/[\\d]+\\/[\\d]+ [\\d]+:[\\d]+[:\\d]*,Laser Power,PDOF 1[\\s]*",
+  "header_identifier": "[\\d]+\\/[\\d]+\\/[\\d]+ [\\d]+:[\\d]+[:\\d]*,Laser Power,PDOF 1[\\s]*",
+  "delim": ",",
+  "titles": [ "Time", "Laser Power", "PDOF 1" ],
+  "types": [ 2, 1, 1 ],
+  "start_time": {
+    "method": "in_header",
+    "params": {
+      "re_pattern": "([\\d]+\\/[\\d]+\\/[\\d]+ [\\d]+:[\\d]+[:\\d]*),Laser Power,PDOF 1[\\r\\s]*",
+      "time_pattern": "%d/%m/%Y %H:%M"
+    }
+  },
+  "interval": {
+    "method": "value",
+    "params": {
+      "increment": 10
+    }
+  },
+  "trim_filter_key": "PDOF 1"
+}
